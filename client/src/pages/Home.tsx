@@ -73,6 +73,27 @@ type Reward = {
   icon: "signal" | "news" | "radar" | "badge";
 };
 
+type AssetProfile = {
+  oneLine: string;
+  archetype: string;
+  audience: string;
+  sensitivity: "HIGH" | "MID" | "LOW";
+  risk: "HIGH" | "MID" | "LOW";
+  strengths: [string, string, string];
+  watch: string;
+};
+
+type GachaPack = {
+  id: "signal" | "sector" | "style";
+  label: string;
+  kicker: string;
+  cost: number;
+  description: string;
+  accent: string;
+  icon: Reward["icon"];
+  rewards: Reward[];
+};
+
 const HERO_IMAGE = "/manus-storage/market-pulse-hero_2e8a32ff.png";
 const GACHA_IMAGE = "/manus-storage/market-pulse-gacha_73e0409e.png";
 const TEXTURE_IMAGE = "/manus-storage/market-pulse-texture_11d38308.png";
@@ -121,6 +142,39 @@ const REWARDS: Reward[] = [
   { id: "wire", name: "Wire Reader", rarity: "RARE", detail: "ニュースを読む交易者のための限定アーカイブバッジ。", accent: "#7ed8ff", icon: "news" },
   { id: "radar", name: "Second Horizon", rarity: "EPIC", detail: "二次的な市場波及を追うための観測レコード。", accent: "#cf9cff", icon: "radar" },
   { id: "thesis", name: "Thesis 01", rarity: "LEGEND", detail: "仮説を持続させた記録。純粋にコレクション用のレアバッジ。", accent: "#f6c96a", icon: "badge" },
+];
+
+const COMPANY_PROFILES: Record<string, AssetProfile> = {
+  orca: { oneLine: "企業のAI活用を支える、計算基盤の設計者。", archetype: "AI INFRA", audience: "大企業・開発者", sensitivity: "HIGH", risk: "HIGH", strengths: ["推論需要", "クラウド投資", "開発者採用"], watch: "設備投資の鈍化" },
+  vector: { oneLine: "決済・資産管理の流れを支える、デジタル金融プレイヤー。", archetype: "FINANCE", audience: "事業者・個人", sensitivity: "MID", risk: "MID", strengths: ["金利環境", "手数料収入", "資本効率"], watch: "信用コストの上昇" },
+  nori: { oneLine: "発電と貯蔵をつなぎ、次世代の電力網を支える。", archetype: "ENERGY", audience: "電力会社・自治体", sensitivity: "MID", risk: "MID", strengths: ["送電網投資", "電力需要", "政策支援"], watch: "資源コストの上昇" },
+  helio: { oneLine: "治療の選択肢を増やす、研究開発型のヘルスケア企業。", archetype: "HEALTH", audience: "医療機関・患者", sensitivity: "HIGH", risk: "HIGH", strengths: ["治験進捗", "承認イベント", "研究成果"], watch: "開発スケジュールの遅延" },
+  sola: { oneLine: "移動をもっと軽くする、都市型モビリティの新世代。", archetype: "MOBILITY", audience: "都市生活者", sensitivity: "HIGH", risk: "MID", strengths: ["販売台数", "供給網", "航続性能"], watch: "部材調達の混乱" },
+  lumen: { oneLine: "日々の買い物データから、新しい消費体験を作る。", archetype: "CONSUMER", audience: "若年層・生活者", sensitivity: "MID", risk: "MID", strengths: ["消費データ", "会員数", "店舗拡大"], watch: "景気減速" },
+  terra: { oneLine: "未来の建設と製造を支える、素材のアップデーター。", archetype: "MATERIALS", audience: "製造業・建設業", sensitivity: "MID", risk: "MID", strengths: ["資源価格", "在庫水準", "設備需要"], watch: "商品市況の反落" },
+  quanta: { oneLine: "電気を途切れさせない、スマートグリッドの挑戦者。", archetype: "UTILITY", audience: "自治体・事業者", sensitivity: "LOW", risk: "LOW", strengths: ["インフラ案件", "長期契約", "送電網更新"], watch: "入札の遅延" },
+  atlas: { oneLine: "速く、誰でも使えるネットワークを目指す基盤プロトコル。", archetype: "LAYER 1", audience: "開発者・コミュニティ", sensitivity: "HIGH", risk: "HIGH", strengths: ["利用者数", "ネットワーク更新", "開発者活動"], watch: "取引量の低下" },
+  nova: { oneLine: "オンチェーン上の資金の流れをなめらかにする。", archetype: "DEFI", audience: "トレーダー・開発者", sensitivity: "HIGH", risk: "HIGH", strengths: ["流動性", "金利水準", "プロトコル利用"], watch: "清算の増加" },
+  rift: { oneLine: "大きなネットワークをもっと軽くする、拡張レイヤー。", archetype: "LAYER 2", audience: "開発者・ゲーマー", sensitivity: "HIGH", risk: "HIGH", strengths: ["処理速度", "手数料", "アプリ数"], watch: "競合の台頭" },
+  etheris: { oneLine: "アプリと資産をつなぐ、プログラム可能なチェーン。", archetype: "SMART CHAIN", audience: "開発者・クリエイター", sensitivity: "MID", risk: "HIGH", strengths: ["ステーキング", "アプリ利用", "アップグレード"], watch: "ネットワーク混雑" },
+  mint: { oneLine: "リアルな価値を、デジタルに持ち運べる形へ。", archetype: "RWA", audience: "投資家・事業者", sensitivity: "MID", risk: "MID", strengths: ["発行額", "提携", "利用領域"], watch: "規制環境の変化" },
+  aura: { oneLine: "交換をもっと身近にする、コミュニティ主導のDEX。", archetype: "DEX", audience: "トレーダー・コミュニティ", sensitivity: "HIGH", risk: "HIGH", strengths: ["取引量", "流動性", "新規ペア"], watch: "短期資金の流出" },
+};
+
+const GACHA_PACKS: GachaPack[] = [
+  { id: "signal", label: "SIGNAL DROP", kicker: "EVERYDAY", cost: 100, description: "ニュースを読むための、基本コレクション。", accent: "#f6c96a", icon: "signal", rewards: REWARDS },
+  { id: "sector", label: "SECTOR FILE", kicker: "THEME", cost: 150, description: "業界ごとの推しポイントを集めるファイル。", accent: "#7ed8ff", icon: "news", rewards: [
+    { id: "grid", name: "Grid Runner", rarity: "COMMON", detail: "インフラ領域を知るためのセクターノート。", accent: "#7ed8ff", icon: "news" },
+    { id: "health", name: "Health Scout", rarity: "RARE", detail: "研究進捗を読むためのファイルバッジ。", accent: "#7ed8ff", icon: "radar" },
+    { id: "chain", name: "Chain Atlas", rarity: "EPIC", detail: "ネットワーク地図を集めたスペシャル記録。", accent: "#7ed8ff", icon: "badge" },
+    { id: "sector-legend", name: "Sector Zero", rarity: "LEGEND", detail: "業界のつながりを見通す、限定アーカイブ。", accent: "#7ed8ff", icon: "badge" },
+  ] },
+  { id: "style", label: "PULSE ID", kicker: "STYLE", cost: 220, description: "自分のトレードスタイルを彩るプロフィール記録。", accent: "#cf9cff", icon: "badge", rewards: [
+    { id: "reader", name: "News Reader", rarity: "COMMON", detail: "ニュースを読むプレイヤーのIDカード。", accent: "#cf9cff", icon: "news" },
+    { id: "calm", name: "Calm Operator", rarity: "RARE", detail: "落ち着いた判断を記録するスタイルバッジ。", accent: "#cf9cff", icon: "signal" },
+    { id: "drift", name: "Trend Drifter", rarity: "EPIC", detail: "流れを追う感覚を映したプロフィール記録。", accent: "#cf9cff", icon: "radar" },
+    { id: "midnight", name: "Midnight Thesis", rarity: "LEGEND", detail: "自分の仮説を持つ人のための限定ID。", accent: "#cf9cff", icon: "badge" },
+  ] },
 ];
 
 const formatMoney = (value: number, precision = 2) =>
@@ -180,6 +234,8 @@ export default function Home() {
   const [archive, setArchive] = useState<Reward[]>([]);
   const [tick, setTick] = useState(1);
   const [timeframe, setTimeframe] = useState<Timeframe>("5M");
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [activePack, setActivePack] = useState<GachaPack | null>(null);
 
   const selected = assets.find((asset) => asset.id === selectedId) ?? assets[0];
   const filteredAssets = tab === "all" ? assets : assets.filter((asset) => asset.kind === tab);
@@ -194,6 +250,7 @@ export default function Home() {
   const equity = cash + marketValue;
   const activeCatalysts = useMemo(() => events.filter((event) => event.effect[selected.id] !== undefined).slice(0, 3), [events, selected.id]);
   const candles = useMemo(() => createCandles(selected, timeframe), [selected, timeframe]);
+  const selectedProfile = COMPANY_PROFILES[selected.id];
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -241,11 +298,11 @@ export default function Home() {
     }
   };
 
-  const pullArchive = () => {
-    if (credits < 100) return toast.error("Archive Credit が足りません", { description: "売買を記録すると Credit を獲得できます。" });
+  const pullArchive = (pack: GachaPack) => {
+    if (credits < pack.cost) return toast.error("Archive Credit が足りません", { description: "売買を記録すると Credit を獲得できます。" });
     const roll = Math.random();
-    const reward = roll > 0.985 ? REWARDS[3] : roll > 0.89 ? REWARDS[2] : roll > 0.59 ? REWARDS[1] : REWARDS[0];
-    setCredits((current) => current - 100);
+    const reward = roll > 0.985 ? pack.rewards[3] : roll > 0.89 ? pack.rewards[2] : roll > 0.59 ? pack.rewards[1] : pack.rewards[0];
+    setCredits((current) => current - pack.cost);
     setGachaResult(reward);
     setArchive((current) => [reward, ...current]);
   };
@@ -306,7 +363,7 @@ export default function Home() {
 
       <section className="min-w-0">
         <header className="sticky top-0 z-20 flex items-center justify-between border-b border-white/10 bg-[#081115]/90 px-5 py-4 backdrop-blur-xl sm:px-8 lg:px-10">
-          <div className="flex items-center gap-3"><img src={LOGO_IMAGE} alt="" className="h-9 w-9 rounded-lg bg-[#c9f34a] p-1" /><div><p className="eyebrow">THE OPEN / MARKET PULSE</p><h1 className="mt-1 font-display text-xl font-semibold tracking-tight text-white">値動きの理由を読む。</h1></div></div>
+          <div className="flex items-center gap-3"><img src={LOGO_IMAGE} alt="" className="h-9 w-9 rounded-lg bg-[#c9f34a] p-1" /><div><p className="eyebrow">THE OPEN / MARKET PULSE</p><h1 className="mt-1 font-display text-xl font-semibold tracking-tight text-white">知る。選ぶ。動く。</h1></div></div>
           <div className="flex items-center gap-3"><button className="relative rounded-full p-2 text-[#9babaf] transition hover:bg-white/5 hover:text-white" aria-label="通知"><Bell size={18} /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#c9f34a]" /></button><div className="hidden h-8 border-l border-white/10 sm:block" /><div className="hidden text-right sm:block"><p className="font-mono text-[9px] tracking-[.14em] text-[#718187]">SESSION</p><p className="font-mono text-[11px] text-white">JP / SIM-01</p></div></div>
         </header>
 
@@ -319,6 +376,8 @@ export default function Home() {
               <div className="self-end rounded-xl border border-white/[.13] bg-[#071012]/75 p-4 backdrop-blur-sm"><div className="flex items-center justify-between"><p className="eyebrow">DOMINANT CATALYST</p><Zap size={15} className="text-[#c9f34a]" /></div><p className="mt-3 font-display text-lg font-medium leading-snug text-white">{activeCatalysts[0]?.title ?? "材料を待機中"}</p><div className="mt-4 flex items-center gap-3"><div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-[#c9f34a]" style={{ width: `${Math.min(94, 24 + eventStrength * 5500)}%` }} /></div><span className="font-mono text-[10px] text-[#c9f34a]">{activeCatalysts[0]?.impact ?? 0}%</span></div></div>
             </div>
           </section>
+
+          <section className="mt-5 flex flex-wrap items-center gap-2 rounded-xl border border-white/[.09] bg-white/[.025] px-4 py-3"><span className="mr-1 font-mono text-[9px] tracking-[.14em] text-[#c9f34a]">PLAY LOOP</span><span className="rounded-md bg-white/[.06] px-2.5 py-1 font-mono text-[10px] text-white">1. ニュースを読む</span><ChevronRight size={13} className="text-[#718187]" /><span className="rounded-md bg-white/[.06] px-2.5 py-1 font-mono text-[10px] text-white">2. 特徴を知る</span><ChevronRight size={13} className="text-[#718187]" /><span className="rounded-md bg-[#c9f34a]/[.12] px-2.5 py-1 font-mono text-[10px] text-[#c9f34a]">3. 売買する</span><span className="ml-auto font-mono text-[9px] text-[#718187]">読み終えたら、決めよう。</span></section>
 
           <div className="mt-6 grid gap-6 min-[760px]:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_370px]">
             <div className="min-w-0 space-y-6">
@@ -338,6 +397,8 @@ export default function Home() {
             <div className="space-y-6">
               <section className="panel-card p-5"><div className="flex items-center justify-between"><div><p className="eyebrow">ORDER TICKET</p><p className="mt-1 font-display text-lg font-medium text-white">{selected.code}</p></div><CandlestickChart size={19} className="text-[#c9f34a]" /></div><div className="mt-5 grid grid-cols-2 gap-3"><div className="rounded-lg bg-white/[.04] p-3"><p className="eyebrow">AVAILABLE</p><p className="mt-1 font-mono text-sm text-white">{formatMoney(cash, 0)}</p></div><div className="rounded-lg bg-white/[.04] p-3"><p className="eyebrow">HELD</p><p className="mt-1 font-mono text-sm text-white">{selectedHolding.quantity} <span className="text-[10px] text-[#819196]">UNIT</span></p></div></div><div className="mt-4"><label className="eyebrow">QUANTITY</label><div className="mt-2 flex overflow-hidden rounded-lg border border-white/[.12] bg-black/20"><button onClick={() => setTradeQuantity((value) => Math.max(1, value - 1))} className="grid w-11 place-items-center border-r border-white/[.1] text-[#a7b6b6] transition hover:bg-white/[.06] hover:text-white"><Minus size={15} /></button><input value={tradeQuantity} onChange={(event) => setTradeQuantity(Number(event.target.value))} type="number" min={1} className="min-w-0 flex-1 bg-transparent px-3 py-3 text-center font-mono text-sm text-white outline-none" /><button onClick={() => setTradeQuantity((value) => value + 1)} className="grid w-11 place-items-center border-l border-white/[.1] text-[#a7b6b6] transition hover:bg-white/[.06] hover:text-white"><Plus size={15} /></button></div></div><div className="mt-4 flex items-center justify-between font-mono text-[10px]"><span className="text-[#7a898d]">EST. NOTIONAL</span><span className="text-white">{formatMoney(selected.price * Math.max(1, tradeQuantity || 1))}</span></div><div className="mt-4 grid grid-cols-2 gap-2"><Button onClick={() => trade("buy")} className="h-11 bg-[#c9f34a] font-display text-[11px] font-semibold tracking-[.08em] text-[#10200e] hover:bg-[#d8fa73]">BUY {selected.code}</Button><Button onClick={() => trade("sell")} variant="outline" className="h-11 border-[#ff775f]/35 bg-[#ff775f]/[.08] font-display text-[11px] font-semibold tracking-[.08em] text-[#ff9a8a] hover:bg-[#ff775f]/[.16] hover:text-white">SELL</Button></div><p className="mt-3 flex gap-1.5 text-[10px] leading-relaxed text-[#718187]"><Info size={13} className="mt-0.5 shrink-0" />ゲーム内通貨のみ。注文はこのシミュレーション市場の価格に反映されません。</p></section>
 
+              <ProfilePreview profile={selectedProfile} asset={selected} onOpen={() => setProfileOpen(true)} />
+
               <section className="panel-card relative overflow-hidden border-l-2 border-l-[#c9f34a]"><div className="flex items-center justify-between border-b border-white/[.09] px-5 py-4"><div><p className="eyebrow">CAUSE → PRICE</p><p className="mt-1 font-display text-lg font-medium text-white">因果メモ</p><p className="mt-0.5 text-[11px] text-[#7d8d91]">価格に効いている材料を優先表示</p></div><Newspaper size={17} className="text-[#c9f34a]" /></div><div className="divide-y divide-white/[.07]">{activeCatalysts.length > 0 ? activeCatalysts.map((event) => <CatalystCard key={event.id} event={event} assetId={selected.id} />) : <div className="p-5 text-sm text-[#8a999d]">この銘柄への直接的なニュース影響はありません。</div>}</div></section>
 
               <section className="panel-card overflow-hidden"><div className="flex items-center justify-between px-5 py-4"><div><p className="eyebrow">YOUR POSITION</p><p className="mt-1 text-sm text-[#a9b7b8]">保有は市場を動かさない</p></div><WalletCards size={17} className="text-[#9cadac]" /></div><div className="grid grid-cols-3 border-t border-white/[.09]"><MiniStat label="MARKET" value={formatMoney(marketValue, 0)} /><MiniStat label="CASH" value={formatMoney(cash, 0)} /><MiniStat label="P/L" value={`${positionPnL >= 0 ? "+" : ""}${formatMoney(positionPnL, 0)}`} tone={positionPnL >= 0 ? "lime" : "coral"} /></div></section>
@@ -347,14 +408,15 @@ export default function Home() {
           <section className="mt-6 grid gap-6 min-[760px]:grid-cols-[1.2fr_.8fr]">
             <section className="panel-card overflow-hidden"><div className="flex items-center justify-between border-b border-white/[.09] px-5 py-5"><div><p className="eyebrow">LIVE NEWSFLOW</p><p className="mt-1 font-display text-lg font-medium text-white">市場を動かす要因</p></div><span className="font-mono text-[10px] text-[#839398]">UPDATED / 5 SEC</span></div><div className="divide-y divide-white/[.07]">{events.map((event) => <article key={event.id} className="group grid gap-4 px-5 py-4 sm:grid-cols-[95px_1fr_auto]"><div><p className={`font-mono text-[9px] tracking-[.12em] ${event.direction === "up" ? "text-[#c9f34a]" : event.direction === "down" ? "text-[#ff917f]" : "text-[#a6b2b2]"}`}>{event.tag}</p><p className="mt-2 flex items-center gap-1 font-mono text-[10px] text-[#718187]"><Clock3 size={11} /> {event.age * 5 + 4}s ago</p></div><div><h3 className="font-display text-base font-medium text-white transition group-hover:text-[#d8fa73]">{event.title}</h3><p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-[#89989b]">{event.copy}</p></div><div className="flex items-start gap-2 sm:flex-col sm:items-end"><span className="font-mono text-[9px] text-[#718187]">{event.source}</span><span className={`flex items-center gap-1 font-mono text-xs ${event.direction === "up" ? "text-[#c9f34a]" : event.direction === "down" ? "text-[#ff917f]" : "text-white"}`}><DirectionIcon direction={event.direction} />{event.impact}</span></div></article>)}</div></section>
 
-            <section className="relative overflow-hidden rounded-2xl border border-[#d19b4b]/25 bg-[#16130f] p-6"><img src={GACHA_IMAGE} alt="分析アーカイブのカプセル" className="absolute -right-14 -top-12 h-64 w-64 object-cover opacity-45 mix-blend-screen" /><div className="relative flex h-full flex-col"><div className="flex items-center justify-between"><div><p className="eyebrow text-[#f5c56b]">SEALED ANALYSIS ARCHIVE</p><p className="mt-1 font-mono text-[9px] tracking-[.1em] text-[#8e704c]">RECORD / {String(archive.length + 2001).padStart(4, "0")}</p></div><Gem size={18} className="text-[#f5c56b]" /></div><h2 className="mt-4 max-w-[240px] font-display text-2xl font-semibold leading-tight text-white">読むほど、記録が増える。</h2><p className="mt-3 max-w-[330px] text-xs leading-relaxed text-[#b49e86]">獲得物はプロフィール用の分析記録です。確率・市場価格・ニュース影響に一切作用しません。</p><div className="mt-auto flex items-center justify-between border-t border-[#d19b4b]/20 pt-5"><div><p className="font-mono text-[9px] tracking-[.12em] text-[#a78a6d]">AVAILABLE</p><p className="mt-1 font-mono text-xl text-[#f6cb72]">{credits} <span className="text-[10px]">CREDIT</span></p></div><Button onClick={() => { setGachaOpen(true); setGachaResult(null); }} className="bg-[#f6c96a] font-display text-[11px] font-semibold tracking-[.08em] text-[#1c1408] hover:bg-[#ffe09a]">UNSEAL RECORD</Button></div></div></section>
+            <section className="relative overflow-hidden rounded-2xl border border-[#d19b4b]/25 bg-[#16130f] p-6"><img src={GACHA_IMAGE} alt="分析アーカイブのカプセル" className="absolute -right-14 -top-12 h-64 w-64 object-cover opacity-45 mix-blend-screen" /><div className="relative flex h-full flex-col"><div className="flex items-center justify-between"><div><p className="eyebrow text-[#f5c56b]">SEALED ANALYSIS ARCHIVE</p><p className="mt-1 font-mono text-[9px] tracking-[.1em] text-[#8e704c]">3 PACKS / RECORD {String(archive.length + 2001).padStart(4, "0")}</p></div><Gem size={18} className="text-[#f5c56b]" /></div><h2 className="mt-4 max-w-[250px] font-display text-2xl font-semibold leading-tight text-white">集め方も、自分で選ぶ。</h2><p className="mt-3 max-w-[330px] text-xs leading-relaxed text-[#b49e86]">ニュース、業界、スタイル。好きなテーマで記録を集めよう。市場の価格やニュースには影響しません。</p><div className="mt-4 flex gap-1.5">{GACHA_PACKS.map((pack) => <span key={pack.id} className="rounded-md border px-2 py-1 font-mono text-[8px] tracking-[.08em]" style={{ color: pack.accent, borderColor: `${pack.accent}40`, backgroundColor: `${pack.accent}0d` }}>{pack.kicker}</span>)}</div><div className="mt-auto flex items-center justify-between border-t border-[#d19b4b]/20 pt-5"><div><p className="font-mono text-[9px] tracking-[.12em] text-[#a78a6d]">AVAILABLE</p><p className="mt-1 font-mono text-xl text-[#f6cb72]">{credits} <span className="text-[10px]">CREDIT</span></p></div><Button onClick={() => { setGachaOpen(true); setGachaResult(null); setActivePack(null); }} className="bg-[#f6c96a] font-display text-[11px] font-semibold tracking-[.08em] text-[#1c1408] hover:bg-[#ffe09a]">CHOOSE PACK</Button></div></div></section>
           </section>
         </div>
       </section>
 
-      <button onClick={() => { setGachaOpen(true); setGachaResult(null); }} className="fixed bottom-5 right-5 z-30 flex items-center gap-2 rounded-full border border-[#d19b4b]/35 bg-[#21170d] px-4 py-3 text-xs font-semibold tracking-[.08em] text-[#f6c96a] shadow-xl lg:hidden"><Archive size={15} /> {credits} CR</button>
+      <button onClick={() => { setGachaOpen(true); setGachaResult(null); setActivePack(null); }} className="fixed bottom-5 right-5 z-30 flex items-center gap-2 rounded-full border border-[#d19b4b]/35 bg-[#21170d] px-4 py-3 text-xs font-semibold tracking-[.08em] text-[#f6c96a] shadow-xl lg:hidden"><Archive size={15} /> {credits} CR</button>
 
-      {gachaOpen && <div role="dialog" aria-modal="true" aria-label="Archive Gacha" className="fixed inset-0 z-50 grid place-items-center bg-[#030708]/75 p-4 backdrop-blur-md"><div className="gacha-modal relative w-full max-w-lg overflow-hidden rounded-2xl border border-[#d19b4b]/35 bg-[#15120d] p-6 shadow-2xl sm:p-8"><button onClick={() => setGachaOpen(false)} className="absolute right-4 top-4 rounded-full p-2 text-[#a98d70] transition hover:bg-white/10 hover:text-white" aria-label="閉じる"><X size={18} /></button>{!gachaResult ? <><img src={GACHA_IMAGE} alt="Archive gacha capsule" className="mx-auto h-40 w-40 rounded-full object-cover opacity-90 mix-blend-screen" /><div className="mt-2 text-center"><p className="eyebrow text-[#f6c96a]">ARCHIVE PULL</p><h2 className="mt-3 font-display text-3xl font-semibold text-white">市場には触れない報酬。</h2><p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-[#b8a08a]">100 Credit で分析アーカイブを1件開封します。内容はコレクション演出のみで、価格・ニュース・約定条件を変えません。</p><div className="mt-6 flex items-center justify-center gap-2 font-mono text-sm text-[#f6c96a]"><CircleDollarSign size={16} /> {credits} / 100 CREDIT</div><Button onClick={pullArchive} className="mt-6 h-12 w-full bg-[#f6c96a] font-display text-xs font-semibold tracking-[.13em] text-[#1d1509] hover:bg-[#ffe09a]">100 CREDIT で開封</Button><p className="mt-3 text-[10px] text-[#8c735c]">過去のアーカイブ: {archive.length} 件</p></div></> : <div className="py-6 text-center"><div className="mx-auto grid h-20 w-20 place-items-center rounded-2xl border" style={{ color: gachaResult.accent, borderColor: `${gachaResult.accent}66`, backgroundColor: `${gachaResult.accent}12` }}><RewardIcon type={gachaResult.icon} /></div><p className="mt-7 font-mono text-[10px] tracking-[.18em]" style={{ color: gachaResult.accent }}>{gachaResult.rarity}</p><h2 className="mt-2 font-display text-3xl font-semibold text-white">{gachaResult.name}</h2><p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-[#b8a08a]">{gachaResult.detail}</p><div className="mt-7 rounded-lg border border-white/10 bg-black/15 px-4 py-3 text-left text-[11px] leading-relaxed text-[#928273]"><span className="font-semibold text-[#d9b37a]">MARKET-SAFE:</span> この報酬は見た目・記録用途のみ。市場の価格計算・ニュース選択・取引結果には影響しません。</div><Button onClick={() => setGachaOpen(false)} className="mt-6 h-11 w-full bg-white text-[#172116] hover:bg-[#e6efe6]">ARCHIVE に保存</Button></div>}</div></div>}
+      {gachaOpen && <div role="dialog" aria-modal="true" aria-label="Archive Gacha" className="fixed inset-0 z-50 grid place-items-center bg-[#030708]/75 p-4 backdrop-blur-md"><div className="gacha-modal relative w-full max-w-2xl overflow-hidden rounded-2xl border border-[#d19b4b]/35 bg-[#15120d] p-6 shadow-2xl sm:p-8"><button onClick={() => setGachaOpen(false)} className="absolute right-4 top-4 rounded-full p-2 text-[#a98d70] transition hover:bg-white/10 hover:text-white" aria-label="閉じる"><X size={18} /></button>{!gachaResult ? <div><div className="text-center"><p className="eyebrow text-[#f6c96a]">ARCHIVE PACKS</p><h2 className="mt-3 font-display text-3xl font-semibold text-white">今日は、何を集める？</h2><p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[#b8a08a]">気になるパックを選ぶだけ。全部、プロフィールを彩るコレクションです。</p></div><div className="mt-7 grid gap-3 sm:grid-cols-3">{GACHA_PACKS.map((pack) => <button key={pack.id} onClick={() => setActivePack(pack)} className={`group rounded-xl border p-4 text-left transition hover:-translate-y-0.5 ${activePack?.id === pack.id ? "bg-white/[.08]" : "bg-black/10 hover:bg-white/[.05]"}`} style={{ borderColor: activePack?.id === pack.id ? pack.accent : `${pack.accent}4a` }}><div className="flex items-center justify-between"><span className="grid h-9 w-9 place-items-center rounded-lg" style={{ backgroundColor: `${pack.accent}18`, color: pack.accent }}><RewardIcon type={pack.icon} /></span><span className="font-mono text-[9px]" style={{ color: pack.accent }}>{pack.kicker}</span></div><p className="mt-4 font-display text-base font-semibold text-white">{pack.label}</p><p className="mt-1 min-h-[38px] text-[11px] leading-relaxed text-[#a58d76]">{pack.description}</p><p className="mt-4 font-mono text-xs" style={{ color: pack.accent }}>{pack.cost} CREDIT</p></button>)}</div>{activePack && <div className="mt-5 flex flex-col items-center justify-between gap-3 rounded-xl border border-[#d19b4b]/20 bg-black/15 p-4 sm:flex-row"><p className="text-center text-xs text-[#b8a08a]">選択中: <span className="font-semibold text-white">{activePack.label}</span>。市場には影響しません。</p><Button onClick={() => pullArchive(activePack)} className="h-11 bg-[#f6c96a] px-6 font-display text-[11px] font-semibold tracking-[.08em] text-[#1d1509] hover:bg-[#ffe09a]">{activePack.cost} CREDIT で開封</Button></div>}<p className="mt-4 text-center text-[10px] text-[#8c735c]">過去のアーカイブ: {archive.length} 件</p></div> : <div className="py-6 text-center"><div className="mx-auto grid h-20 w-20 place-items-center rounded-2xl border" style={{ color: gachaResult.accent, borderColor: `${gachaResult.accent}66`, backgroundColor: `${gachaResult.accent}12` }}><RewardIcon type={gachaResult.icon} /></div><p className="mt-7 font-mono text-[10px] tracking-[.18em]" style={{ color: gachaResult.accent }}>{gachaResult.rarity}</p><h2 className="mt-2 font-display text-3xl font-semibold text-white">{gachaResult.name}</h2><p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-[#b8a08a]">{gachaResult.detail}</p><div className="mt-7 rounded-lg border border-white/10 bg-black/15 px-4 py-3 text-left text-[11px] leading-relaxed text-[#928273]"><span className="font-semibold text-[#d9b37a]">MARKET-SAFE:</span> この報酬は見た目・記録用途のみ。市場の価格計算・ニュース選択・取引結果には影響しません。</div><Button onClick={() => setGachaOpen(false)} className="mt-6 h-11 w-full bg-white text-[#172116] hover:bg-[#e6efe6]">ARCHIVE に保存</Button></div>}</div></div>}
+      {profileOpen && <ProfileModal asset={selected} profile={selectedProfile} onClose={() => setProfileOpen(false)} />}
     </main>
   );
 }
@@ -377,6 +439,21 @@ function CatalystCard({ event, assetId }: { event: MarketEvent; assetId: string 
 
 function MiniStat({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "neutral" | "lime" | "coral" }) {
   return <div className="min-w-0 border-r border-white/[.09] px-3 py-4 last:border-r-0"><p className="truncate font-mono text-[8px] tracking-[.11em] text-[#718187]">{label}</p><p className={`mt-1 truncate font-mono text-[11px] ${tone === "lime" ? "text-[#c9f34a]" : tone === "coral" ? "text-[#ff917f]" : "text-white"}`}>{value}</p></div>;
+}
+
+function ProfilePreview({ profile, asset, onOpen }: { profile: AssetProfile; asset: Asset; onOpen: () => void }) {
+  const isCrypto = asset.kind === "Crypto";
+  return <section className="panel-card overflow-hidden"><div className="flex items-start justify-between border-b border-white/[.09] px-5 py-4"><div><p className="eyebrow">{isCrypto ? "PROTOCOL SNAPSHOT" : "COMPANY SNAPSHOT"}</p><p className="mt-1 font-display text-lg font-medium text-white">{asset.code} を知る</p></div><Box size={18} className="text-[#c9f34a]" /></div><div className="p-5"><p className="text-sm leading-relaxed text-[#d9e4dd]">{profile.oneLine}</p><div className="mt-4 flex flex-wrap gap-1.5"><span className="rounded-md bg-[#c9f34a]/[.1] px-2 py-1 font-mono text-[9px] text-[#c9f34a]">{profile.archetype}</span><span className="rounded-md bg-white/[.06] px-2 py-1 font-mono text-[9px] text-[#b7c5c2]">{profile.audience}</span></div><div className="mt-4 grid grid-cols-2 gap-2"><div className="rounded-lg bg-white/[.04] p-2.5"><p className="eyebrow">NEWS REACT</p><p className={`mt-1 font-mono text-xs ${profile.sensitivity === "HIGH" ? "text-[#f6c96a]" : "text-[#d9e4dd]"}`}>{profile.sensitivity}</p></div><div className="rounded-lg bg-white/[.04] p-2.5"><p className="eyebrow">RISK FEEL</p><p className={`mt-1 font-mono text-xs ${profile.risk === "HIGH" ? "text-[#ff917f]" : "text-[#d9e4dd]"}`}>{profile.risk}</p></div></div><button onClick={onOpen} className="mt-4 flex w-full items-center justify-between rounded-lg border border-white/[.12] bg-white/[.03] px-3 py-2.5 text-left transition hover:border-[#c9f34a]/40 hover:bg-[#c9f34a]/[.06]"><span className="font-display text-xs font-medium text-white">特徴と注意ポイントを見る</span><ChevronRight size={15} className="text-[#c9f34a]" /></button></div></section>;
+}
+
+function ProfileModal({ asset, profile, onClose }: { asset: Asset; profile: AssetProfile; onClose: () => void }) {
+  const isCrypto = asset.kind === "Crypto";
+  return <div role="dialog" aria-modal="true" aria-label={`${asset.name} の特徴`} className="fixed inset-0 z-50 grid place-items-center bg-[#030708]/75 p-4 backdrop-blur-md"><section className="gacha-modal relative w-full max-w-xl overflow-hidden rounded-2xl border border-[#c9f34a]/30 bg-[#0e1a1e] shadow-2xl"><div className="absolute -right-14 -top-14 h-44 w-44 rounded-full bg-[#c9f34a]/10 blur-3xl" /><button onClick={onClose} className="absolute right-4 top-4 rounded-full p-2 text-[#a6b5b1] transition hover:bg-white/10 hover:text-white" aria-label="閉じる"><X size={18} /></button><div className="relative border-b border-white/[.09] p-6 sm:p-7"><p className="eyebrow text-[#c9f34a]">{isCrypto ? "PROTOCOL PROFILE" : "COMPANY PROFILE"}</p><div className="mt-3 flex items-end gap-3"><h2 className="font-display text-4xl font-bold tracking-[-.07em] text-white">{asset.code}</h2><p className="mb-1 text-sm text-[#a9b9b7]">{asset.name}</p></div><p className="mt-4 max-w-lg text-base leading-relaxed text-[#dce8df]">{profile.oneLine}</p></div><div className="relative grid gap-5 p-6 sm:grid-cols-[1.1fr_.9fr] sm:p-7"><div><p className="eyebrow">WHAT TO WATCH</p><div className="mt-3 space-y-2">{profile.strengths.map((strength, index) => <div key={strength} className="flex items-center gap-3 rounded-lg bg-white/[.045] px-3 py-2.5"><span className="grid h-5 w-5 place-items-center rounded-full bg-[#c9f34a] font-mono text-[9px] font-semibold text-[#12200f]">{index + 1}</span><span className="text-sm text-white">{strength}</span></div>)}</div></div><div className="rounded-xl border border-white/[.09] bg-black/15 p-4"><p className="eyebrow">QUICK FACTS</p><div className="mt-3 space-y-3"><FactRow label="TYPE" value={profile.archetype} accent="lime" /><FactRow label="FOR" value={profile.audience} /><FactRow label="NEWS REACT" value={profile.sensitivity} accent={profile.sensitivity === "HIGH" ? "amber" : "neutral"} /><FactRow label="RISK FEEL" value={profile.risk} accent={profile.risk === "HIGH" ? "coral" : "neutral"} /></div></div><div className="sm:col-span-2 rounded-xl border border-[#ff775f]/20 bg-[#ff775f]/[.06] p-4"><p className="eyebrow text-[#ff917f]">KEEP IN MIND</p><p className="mt-2 text-sm text-[#ffe0da]">注意: {profile.watch}</p><p className="mt-1 text-[11px] leading-relaxed text-[#a99a96]">この内容は、ゲーム内の架空市場を理解するためのプロフィールです。実在の企業・投資判断に関する情報ではありません。</p></div></div></section></div>;
+}
+
+function FactRow({ label, value, accent = "neutral" }: { label: string; value: string; accent?: "lime" | "amber" | "coral" | "neutral" }) {
+  const colors = { lime: "text-[#c9f34a]", amber: "text-[#f6c96a]", coral: "text-[#ff917f]", neutral: "text-white" };
+  return <div className="flex items-center justify-between gap-3 border-b border-white/[.07] pb-2 last:border-0 last:pb-0"><span className="font-mono text-[9px] tracking-[.11em] text-[#77888c]">{label}</span><span className={`text-right font-mono text-[10px] ${colors[accent]}`}>{value}</span></div>;
 }
 
 function CandlestickPanel({ candles, crypto }: { candles: Candle[]; crypto: boolean }) {

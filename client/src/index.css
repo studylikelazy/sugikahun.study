@@ -1,4 +1,4 @@
-/** Pulse Terminal global styling: ink-newsroom base, signal-lime data, editorial type rhythm. */
+/** Pulse Terminal global styling: ink-newsroom base, clear blue actions, green gains, red losses, gold asset value. */
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+JP:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -42,8 +42,8 @@
   --card-foreground: oklch(0.93 0.012 164);
   --popover: oklch(0.145 0.015 190);
   --popover-foreground: oklch(0.93 0.012 164);
-  --primary: oklch(0.91 0.19 118);
-  --primary-foreground: oklch(0.17 0.035 118);
+  --primary: oklch(0.66 0.16 252);
+  --primary-foreground: oklch(0.98 0.005 252);
   --secondary: oklch(0.22 0.017 190);
   --secondary-foreground: oklch(0.89 0.012 164);
   --muted: oklch(0.2 0.014 190);
@@ -54,7 +54,7 @@
   --destructive-foreground: oklch(0.98 0 0);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.91 0.19 118);
+  --ring: oklch(0.66 0.16 252);
 }
 
 @layer base {

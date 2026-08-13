@@ -92,7 +92,7 @@ type AssetProfile = {
 };
 
 type GachaPack = {
-  id: "signal" | "sector" | "style";
+  id: "signal" | "sector" | "style" | "macro" | "chart";
   label: string;
   kicker: string;
   cost: number;
@@ -197,6 +197,18 @@ const GACHA_PACKS: GachaPack[] = [
     { id: "drift", name: "Trend Drifter", rarity: "EPIC", detail: "流れを追う感覚を映したプロフィール記録。", accent: "#cf9cff", icon: "radar" },
     { id: "midnight", name: "Midnight Thesis", rarity: "LEGEND", detail: "自分の仮説を持つ人のための限定ID。", accent: "#cf9cff", icon: "badge" },
   ] },
+  { id: "macro", label: "MACRO FLASH", kicker: "WORLD", cost: 180, description: "世界の流れを短く読む、マクロ視点のアーカイブ。", accent: "#7ab8ff", icon: "signal", rewards: [
+    { id: "yield-note", name: "Yield Note", rarity: "COMMON", detail: "金利の変化を記録する、短いマクロノート。", accent: "#7ab8ff", icon: "signal" },
+    { id: "risk-map", name: "Risk Map", rarity: "RARE", detail: "資金の向かう先を整理した、リスクオンの地図。", accent: "#7ab8ff", icon: "news" },
+    { id: "global-tape", name: "Global Tape", rarity: "EPIC", detail: "国境をまたぐ流れを追う、編集デスクのテープ。", accent: "#7ab8ff", icon: "radar" },
+    { id: "macro-zero", name: "Macro Zero", rarity: "LEGEND", detail: "市場全体の前提を読むための、限定マクロ記録。", accent: "#7ab8ff", icon: "badge" },
+  ] },
+  { id: "chart", label: "CHART LAB", kicker: "TACTIC", cost: 200, description: "価格の形と動きを読む、チャート観測のコレクション。", accent: "#5ee8b0", icon: "radar", rewards: [
+    { id: "candle-note", name: "Candle Note", rarity: "COMMON", detail: "ローソク足の形を記録する、観測メモ。", accent: "#5ee8b0", icon: "signal" },
+    { id: "volume-scan", name: "Volume Scan", rarity: "RARE", detail: "出来高の変化を追う、分析スキャン。", accent: "#5ee8b0", icon: "news" },
+    { id: "breakout-frame", name: "Breakout Frame", rarity: "EPIC", detail: "価格が動き出す場面を記した、フレーム記録。", accent: "#5ee8b0", icon: "radar" },
+    { id: "tape-master", name: "Tape Master", rarity: "LEGEND", detail: "値動きのリズムを見通す、限定チャートレコード。", accent: "#5ee8b0", icon: "badge" },
+  ] },
 ];
 
 const formatMoney = (value: number, precision = 2) =>
@@ -262,6 +274,8 @@ export default function Home() {
   const [archiveFilter, setArchiveFilter] = useState<"ALL" | Reward["rarity"]>("ALL");
   const [chartCandles, setChartCandles] = useState<Candle[]>(() => createCandles(INITIAL_ASSETS[0], "5M"));
   const [activeArchiveId, setActiveArchiveId] = useState<string | null>(null);
+  const [isOpening, setIsOpening] = useState(false);
+  const [openingPack, setOpeningPack] = useState<GachaPack | null>(null);
 
   const selected = assets.find((asset) => asset.id === selectedId) ?? assets[0];
   const filteredAssets = tab === "all" ? assets : assets.filter((asset) => asset.kind === tab);
@@ -297,6 +311,12 @@ export default function Home() {
   useEffect(() => {
     setChartCandles(createCandles(selected, timeframe));
   }, [selectedId, timeframe]);
+
+  useEffect(() => {
+    if (gachaOpen || !gachaResult) return;
+    const timer = window.setTimeout(() => document.getElementById("archive-vault")?.scrollIntoView({ behavior: "smooth", block: "start" }), 180);
+    return () => window.clearTimeout(timer);
+  }, [gachaOpen, gachaResult]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -372,6 +392,9 @@ export default function Home() {
     const roll = Math.random();
     const reward = roll > 0.99 ? pack.rewards[3] : roll > 0.9 ? pack.rewards[2] : roll > 0.6 ? pack.rewards[1] : pack.rewards[0];
     setCredits((current) => current - pack.cost);
+    setOpeningPack(pack);
+    setIsOpening(true);
+    window.setTimeout(() => setIsOpening(false), 1450);
     setGachaResult(reward);
     setArchive((current) => [reward, ...current]);
     toast.success(`${RARITY_META[reward.rarity].label} を獲得`, { description: `${reward.name} をアーカイブに保存しました。` });
@@ -479,13 +502,14 @@ export default function Home() {
 
             <section className="relative overflow-hidden rounded-2xl border border-[#d19b4b]/25 bg-[#16130f] p-6"><img src={GACHA_IMAGE} alt="分析アーカイブのカプセル" className="absolute -right-14 -top-12 h-64 w-64 object-cover opacity-45 mix-blend-screen" /><div className="relative flex h-full flex-col"><div className="flex items-center justify-between"><div><p className="eyebrow text-[#f5c56b]">SEALED ANALYSIS ARCHIVE</p><p className="mt-1 font-mono text-[9px] tracking-[.1em] text-[#8e704c]">3 PACKS / RECORD {String(archive.length + 2001).padStart(4, "0")}</p></div><Gem size={18} className="text-[#f5c56b]" /></div><h2 className="mt-4 max-w-[250px] font-display text-2xl font-semibold leading-tight text-white">集め方も、自分で選ぶ。</h2><p className="mt-3 max-w-[330px] text-xs leading-relaxed text-[#b49e86]">ニュース、業界、スタイル。好きなテーマで記録を集めよう。市場の価格やニュースには影響しません。</p><div className="mt-4 flex gap-1.5">{GACHA_PACKS.map((pack) => <span key={pack.id} className="rounded-md border px-2 py-1 font-mono text-[8px] tracking-[.08em]" style={{ color: pack.accent, borderColor: `${pack.accent}40`, backgroundColor: `${pack.accent}0d` }}>{pack.kicker}</span>)}</div><div className="mt-auto flex items-center justify-between border-t border-[#d19b4b]/20 pt-5"><div><p className="font-mono text-[9px] tracking-[.12em] text-[#a78a6d]">AVAILABLE</p><p className="mt-1 font-mono text-xl text-[#f6cb72]">{credits} <span className="text-[10px]">CREDIT</span></p></div><Button onClick={() => { setGachaOpen(true); setGachaResult(null); setActivePack(null); }} className="bg-[#f6c96a] font-display text-[11px] font-semibold tracking-[.08em] text-[#1c1408] hover:bg-[#ffe09a]">CHOOSE PACK</Button></div></div></section>
           </section>
-          <ArchiveVault archive={visibleArchive} activeFilter={archiveFilter} onFilter={setArchiveFilter} totalCount={archive.length} />
+          <div id="archive-vault"><ArchiveVault archive={visibleArchive} activeFilter={archiveFilter} onFilter={setArchiveFilter} totalCount={archive.length} /></div>
         </div>
       </section>
 
       <button onClick={() => { setGachaOpen(true); setGachaResult(null); setActivePack(null); }} className="fixed bottom-5 right-5 z-30 flex items-center gap-2 rounded-full border border-[#d19b4b]/35 bg-[#21170d] px-4 py-3 text-xs font-semibold tracking-[.08em] text-[#f6c96a] shadow-xl lg:hidden"><Archive size={15} /> {credits} CR</button>
 
       {gachaOpen && <div role="dialog" aria-modal="true" aria-label="Archive Gacha" className="fixed inset-0 z-50 grid place-items-center bg-[#030708]/75 p-4 backdrop-blur-md"><div className="gacha-modal relative w-full max-w-2xl overflow-hidden rounded-2xl border border-[#d19b4b]/35 bg-[#15120d] p-6 shadow-2xl sm:p-8"><button onClick={() => setGachaOpen(false)} className="absolute right-4 top-4 rounded-full p-2 text-[#a98d70] transition hover:bg-white/10 hover:text-white" aria-label="閉じる"><X size={18} /></button>{!gachaResult ? <div><div className="text-center"><p className="eyebrow text-[#f6c96a]">ARCHIVE PACKS</p><h2 className="mt-3 font-display text-3xl font-semibold text-white">今日は、何を集める？</h2><p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[#b8a08a]">気になるパックを選ぶだけ。全部、プロフィールを彩るコレクションです。</p></div><div className="mt-7 grid gap-3 sm:grid-cols-3">{GACHA_PACKS.map((pack) => <button key={pack.id} onClick={() => setActivePack(pack)} className={`group rounded-xl border p-4 text-left transition hover:-translate-y-0.5 ${activePack?.id === pack.id ? "bg-white/[.08]" : "bg-black/10 hover:bg-white/[.05]"}`} style={{ borderColor: activePack?.id === pack.id ? pack.accent : `${pack.accent}4a` }}><div className="flex items-center justify-between"><span className="grid h-9 w-9 place-items-center rounded-lg" style={{ backgroundColor: `${pack.accent}18`, color: pack.accent }}><RewardIcon type={pack.icon} /></span><span className="font-mono text-[9px]" style={{ color: pack.accent }}>{pack.kicker}</span></div><p className="mt-4 font-display text-base font-semibold text-white">{pack.label}</p><p className="mt-1 min-h-[38px] text-[11px] leading-relaxed text-[#a58d76]">{pack.description}</p><p className="mt-4 font-mono text-xs" style={{ color: pack.accent }}>{pack.cost} CREDIT</p></button>)}</div>{activePack && <div className="mt-5 flex flex-col items-center justify-between gap-3 rounded-xl border border-[#d19b4b]/20 bg-black/15 p-4 sm:flex-row"><p className="text-center text-xs text-[#b8a08a]">選択中: <span className="font-semibold text-white">{activePack.label}</span>。市場には影響しません。</p><Button onClick={() => pullArchive(activePack)} className="h-11 bg-[#f6c96a] px-6 font-display text-[11px] font-semibold tracking-[.08em] text-[#1d1509] hover:bg-[#ffe09a]">{activePack.cost} CREDIT で開封</Button></div>}<p className="mt-4 text-center text-[10px] text-[#8c735c]">過去のアーカイブ: {archive.length} 件</p></div> : <div className="py-6 text-center"><div className="mx-auto grid h-20 w-20 place-items-center rounded-2xl border" style={{ color: gachaResult.accent, borderColor: `${gachaResult.accent}66`, backgroundColor: `${gachaResult.accent}12` }}><RewardIcon type={gachaResult.icon} /></div><p className="mt-7 font-mono text-[10px] tracking-[.18em]" style={{ color: gachaResult.accent }}>{gachaResult.rarity}</p><h2 className="mt-2 font-display text-3xl font-semibold text-white">{gachaResult.name}</h2><p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-[#b8a08a]">{gachaResult.detail}</p><div className="mt-7 rounded-lg border border-white/10 bg-black/15 px-4 py-3 text-left text-[11px] leading-relaxed text-[#928273]"><span className="font-semibold text-[#d9b37a]">MARKET-SAFE:</span> この報酬は見た目・記録用途のみ。市場の価格計算・ニュース選択・取引結果には影響しません。</div><Button onClick={() => setGachaOpen(false)} className="mt-6 h-11 w-full bg-white text-[#172116] hover:bg-[#e6efe6]">ARCHIVE に保存</Button></div>}</div></div>}
+      {isOpening && openingPack && <ArchiveOpeningOverlay pack={openingPack} />}
       {profileOpen && <ProfileModal asset={selected} profile={selectedProfile} onClose={() => setProfileOpen(false)} />}
     </main>
   );
@@ -530,6 +554,10 @@ function AssetOverview({ cash, marketValue, equity, pnl, positions }: { cash: nu
 function MoneyTile({ label, value, accent }: { label: string; value: string; accent: "blue" | "green" | "red" }) {
   const colors = { blue: "border-[#4f9bff]/28 bg-[#4f9bff]/[.08] text-[#74b5ff]", green: "border-[#36d399]/28 bg-[#36d399]/[.08] text-[#36d399]", red: "border-[#ff7474]/28 bg-[#ff7474]/[.08] text-[#ff9292]" };
   return <div className={`min-w-0 rounded-lg border p-2.5 ${colors[accent]}`}><p className="font-mono text-[8px] tracking-[.1em] opacity-75">{label}</p><p className="mt-1 truncate font-mono text-[11px] font-medium text-white">{value}</p></div>;
+}
+
+function ArchiveOpeningOverlay({ pack }: { pack: GachaPack }) {
+  return <div className="fixed inset-0 z-[80] grid place-items-center bg-[#020709]/86 p-5 backdrop-blur-md"><div className="archive-opening relative w-full max-w-md overflow-hidden rounded-2xl border p-7 text-center shadow-2xl" style={{ borderColor: `${pack.accent}88`, backgroundColor: "#0b1519" }}><div className="archive-opening-scan absolute inset-x-0 top-0 h-px" style={{ backgroundColor: pack.accent }} /><div className="absolute inset-0 opacity-25" style={{ backgroundImage: `radial-gradient(circle at 50% 0%, ${pack.accent}55 0%, transparent 56%)` }} /><div className="relative"><p className="font-mono text-[10px] tracking-[.2em]" style={{ color: pack.accent }}>SEAL BREAKING / {pack.kicker}</p><div className="archive-opening-core mx-auto mt-7 grid h-24 w-24 place-items-center rounded-2xl border" style={{ color: pack.accent, borderColor: `${pack.accent}66`, backgroundColor: `${pack.accent}16` }}><RewardIcon type={pack.icon} /></div><p className="mt-6 font-display text-2xl font-semibold text-white">ARCHIVE UNSEALING</p><div className="mx-auto mt-6 flex max-w-[260px] items-center justify-between gap-2">{["SEAL", "SCAN", "REVEAL"].map((step, index) => <div key={step} className="flex items-center gap-2"><span className="grid h-6 w-6 place-items-center rounded-full border font-mono text-[9px]" style={{ color: pack.accent, borderColor: `${pack.accent}88`, backgroundColor: `${pack.accent}12` }}>{index + 1}</span><span className="font-mono text-[8px] tracking-[.08em] text-[#a9babd]">{step}</span>{index < 2 && <span className="h-px w-3 bg-white/15" />}</div>)}</div><p className="mt-6 font-mono text-[10px] text-[#93a6aa]">解析中… レアリティを確認しています。</p></div></div></div>;
 }
 
 function ArchiveModuleRack({ archive, activeArchive, activeEffect, onActivate, onDeactivate, candles, catalysts }: { archive: Reward[]; activeArchive: Reward | null; activeEffect: ArchiveEffect | null; onActivate: (reward: Reward) => void; onDeactivate: () => void; candles: Candle[]; catalysts: MarketEvent[] }) {

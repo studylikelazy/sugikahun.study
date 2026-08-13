@@ -83,3 +83,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes archive-core-pulse { 0%, 100% { transform: scale(.96); opacity: .72; box-shadow: 0 0 0 rgba(79,155,255,0); } 55% { transform: scale(1.06); opacity: 1; box-shadow: 0 0 42px rgba(79,155,255,.38); } }
+  @keyframes archive-scan { 0% { transform: translateY(0); opacity: .35; } 55% { transform: translateY(286px); opacity: 1; } 100% { transform: translateY(360px); opacity: 0; } }
+  .archive-opening-core { animation: archive-core-pulse 720ms cubic-bezier(.23,1,.32,1) infinite; }
+  .archive-opening-scan { animation: archive-scan 1250ms cubic-bezier(.23,1,.32,1) infinite; }
+}

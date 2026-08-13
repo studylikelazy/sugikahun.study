@@ -145,6 +145,13 @@ const REWARDS: Reward[] = [
   { id: "thesis", name: "Thesis 01", rarity: "LEGEND", detail: "仮説を持続させた記録。純粋にコレクション用のレアバッジ。", accent: "#f6c96a", icon: "badge" },
 ];
 
+const RARITY_META: Record<Reward["rarity"], { label: string; rate: string; color: string; border: string; background: string }> = {
+  COMMON: { label: "COMMON", rate: "60%", color: "#bdd7ef", border: "#4f9bff55", background: "#4f9bff12" },
+  RARE: { label: "RARE", rate: "30%", color: "#72d3ff", border: "#38bdf855", background: "#38bdf812" },
+  EPIC: { label: "EPIC", rate: "9%", color: "#b9a4ff", border: "#9b7dff55", background: "#9b7dff12" },
+  LEGEND: { label: "LEGEND", rate: "1%", color: "#ffd178", border: "#f6c96a66", background: "#f6c96a12" },
+};
+
 const COMPANY_PROFILES: Record<string, AssetProfile> = {
   orca: { oneLine: "企業のAI活用を支える、計算基盤の設計者。", archetype: "AI INFRA", audience: "大企業・開発者", sensitivity: "HIGH", risk: "HIGH", strengths: ["推論需要", "クラウド投資", "開発者採用"], watch: "設備投資の鈍化" },
   vector: { oneLine: "決済・資産管理の流れを支える、デジタル金融プレイヤー。", archetype: "FINANCE", audience: "事業者・個人", sensitivity: "MID", risk: "MID", strengths: ["金利環境", "手数料収入", "資本効率"], watch: "信用コストの上昇" },
@@ -187,7 +194,7 @@ const TIMEFRAMES: Timeframe[] = ["1M", "5M", "15M", "1H", "1D"];
 
 function createCandles(asset: Asset, timeframe: Timeframe): Candle[] {
   const count = timeframe === "1M" ? 44 : timeframe === "5M" ? 38 : timeframe === "15M" ? 34 : timeframe === "1H" ? 30 : 26;
-  const scale = asset.kind === "Crypto" ? 0.0085 : 0.0048;
+  const scale = asset.kind === "Crypto" ? 0.024 : 0.012;
   const codeSeed = asset.id.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
   const openingPrice = asset.price / (1 + asset.change / 100);
   let previousClose = openingPrice * (0.978 + (codeSeed % 8) / 1000);
@@ -238,6 +245,7 @@ export default function Home() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [activePack, setActivePack] = useState<GachaPack | null>(null);
   const [activeSection, setActiveSection] = useState<NavigationSection>("markets");
+  const [archiveFilter, setArchiveFilter] = useState<"ALL" | Reward["rarity"]>("ALL");
 
   const selected = assets.find((asset) => asset.id === selectedId) ?? assets[0];
   const filteredAssets = tab === "all" ? assets : assets.filter((asset) => asset.kind === tab);
@@ -258,6 +266,7 @@ export default function Home() {
   const activeCatalysts = useMemo(() => events.filter((event) => event.effect[selected.id] !== undefined).slice(0, 3), [events, selected.id]);
   const candles = useMemo(() => createCandles(selected, timeframe), [selected, timeframe]);
   const selectedProfile = COMPANY_PROFILES[selected.id];
+  const visibleArchive = archiveFilter === "ALL" ? archive : archive.filter((reward) => reward.rarity === archiveFilter);
 
   useEffect(() => {
     if (!profileOpen) return;
@@ -273,8 +282,8 @@ export default function Home() {
       setAssets((current) =>
         current.map((asset) => {
           const weightedEffect = events.reduce((sum, event) => sum + (event.effect[asset.id] ?? 0) * Math.max(0.18, 1 - event.age * 0.11), 0);
-          const microMove = (Math.random() - 0.48) * (asset.kind === "Crypto" ? 0.006 : 0.003);
-          const move = weightedEffect * 0.25 + microMove;
+          const microMove = (Math.random() - 0.5) * (asset.kind === "Crypto" ? 0.028 : 0.014);
+          const move = weightedEffect * 0.82 + microMove;
           const nextPrice = Math.max(asset.kind === "Crypto" ? 0.08 : 5, asset.price * (1 + move));
           const opening = asset.history[0];
           return { ...asset, price: nextPrice, change: ((nextPrice - opening) / opening) * 100, history: [...asset.history.slice(-23), nextPrice] };
@@ -317,10 +326,11 @@ export default function Home() {
   const pullArchive = (pack: GachaPack) => {
     if (credits < pack.cost) return toast.error("Archive Credit が足りません", { description: "売買を記録すると Credit を獲得できます。" });
     const roll = Math.random();
-    const reward = roll > 0.985 ? pack.rewards[3] : roll > 0.89 ? pack.rewards[2] : roll > 0.59 ? pack.rewards[1] : pack.rewards[0];
+    const reward = roll > 0.99 ? pack.rewards[3] : roll > 0.9 ? pack.rewards[2] : roll > 0.6 ? pack.rewards[1] : pack.rewards[0];
     setCredits((current) => current - pack.cost);
     setGachaResult(reward);
     setArchive((current) => [reward, ...current]);
+    toast.success(`${RARITY_META[reward.rarity].label} を獲得`, { description: `${reward.name} をアーカイブに保存しました。` });
   };
 
   const selectedHolding = holdings[selected.id] ?? { quantity: 0, avgCost: 0 };
@@ -402,7 +412,7 @@ export default function Home() {
                 <div className="absolute left-0 top-0 h-full w-1 bg-[#4f9bff]" />
                 <div className="flex flex-col justify-between gap-4 border-b border-white/[.09] px-5 py-5 sm:flex-row sm:items-center"><div className="flex items-center gap-4"><div className="hidden font-mono text-[10px] tracking-[.15em] text-[#74b5ff] sm:block">01</div><div><p className="eyebrow">PRICE ACTION / OHLC + VOLUME</p><p className="mt-1 font-display text-xl font-medium tracking-[-.03em] text-white">{selected.name}<span className="ml-2 font-mono text-xs font-normal text-[#7c8c91]">{selected.kind.toUpperCase()}</span></p></div></div><div className="flex items-center gap-2"><span className="rounded-md bg-white/[.05] px-2 py-1 font-mono text-[9px] text-[#a7b6b6]">CANDLE</span><span className="rounded-md border border-[#4f9bff]/25 bg-[#4f9bff]/[.09] px-2 py-1 font-mono text-[9px] text-[#74b5ff]">TICK / 5S</span></div></div>
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[.07] bg-black/10 px-5 py-3"><div className="flex items-center gap-1 overflow-x-auto rounded-md border border-white/[.08] bg-white/[.025] p-1">{TIMEFRAMES.map((period) => <button key={period} onClick={() => setTimeframe(period)} className={`shrink-0 rounded px-2.5 py-1.5 font-mono text-[10px] transition ${timeframe === period ? "bg-[#4f9bff] text-white" : "text-[#85959a] hover:bg-white/[.07] hover:text-white"}`}>{period}</button>)}</div><div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px]"><span className="text-[#738287]">O <b className="font-medium text-[#d8e1dc]">{formatMoney(candles.at(-1)?.open ?? selected.price, selected.kind === "Crypto" ? 3 : 2)}</b></span><span className="text-[#738287]">H <b className="font-medium text-[#d8e1dc]">{formatMoney(candles.at(-1)?.high ?? selected.price, selected.kind === "Crypto" ? 3 : 2)}</b></span><span className="text-[#738287]">L <b className="font-medium text-[#d8e1dc]">{formatMoney(candles.at(-1)?.low ?? selected.price, selected.kind === "Crypto" ? 3 : 2)}</b></span><span className="text-[#738287]">C <b className={`font-medium ${selected.change >= 0 ? "text-[#5ee8b0]" : "text-[#ff9e9e]"}`}>{formatPrice(selected)}</b></span></div></div>
-                <div className="h-[330px] px-2 pb-3 pt-4 min-[760px]:h-[390px] sm:px-4"><CandlestickPanel candles={candles} crypto={selected.kind === "Crypto"} /></div>
+                <div className="h-[330px] px-2 pb-3 pt-4 min-[760px]:h-[390px] sm:px-4"><BlueCandlestickPanel candles={candles} crypto={selected.kind === "Crypto"} /></div>
               </section>
 
               <section className="panel-card overflow-hidden">
@@ -427,6 +437,7 @@ export default function Home() {
 
             <section className="relative overflow-hidden rounded-2xl border border-[#d19b4b]/25 bg-[#16130f] p-6"><img src={GACHA_IMAGE} alt="分析アーカイブのカプセル" className="absolute -right-14 -top-12 h-64 w-64 object-cover opacity-45 mix-blend-screen" /><div className="relative flex h-full flex-col"><div className="flex items-center justify-between"><div><p className="eyebrow text-[#f5c56b]">SEALED ANALYSIS ARCHIVE</p><p className="mt-1 font-mono text-[9px] tracking-[.1em] text-[#8e704c]">3 PACKS / RECORD {String(archive.length + 2001).padStart(4, "0")}</p></div><Gem size={18} className="text-[#f5c56b]" /></div><h2 className="mt-4 max-w-[250px] font-display text-2xl font-semibold leading-tight text-white">集め方も、自分で選ぶ。</h2><p className="mt-3 max-w-[330px] text-xs leading-relaxed text-[#b49e86]">ニュース、業界、スタイル。好きなテーマで記録を集めよう。市場の価格やニュースには影響しません。</p><div className="mt-4 flex gap-1.5">{GACHA_PACKS.map((pack) => <span key={pack.id} className="rounded-md border px-2 py-1 font-mono text-[8px] tracking-[.08em]" style={{ color: pack.accent, borderColor: `${pack.accent}40`, backgroundColor: `${pack.accent}0d` }}>{pack.kicker}</span>)}</div><div className="mt-auto flex items-center justify-between border-t border-[#d19b4b]/20 pt-5"><div><p className="font-mono text-[9px] tracking-[.12em] text-[#a78a6d]">AVAILABLE</p><p className="mt-1 font-mono text-xl text-[#f6cb72]">{credits} <span className="text-[10px]">CREDIT</span></p></div><Button onClick={() => { setGachaOpen(true); setGachaResult(null); setActivePack(null); }} className="bg-[#f6c96a] font-display text-[11px] font-semibold tracking-[.08em] text-[#1c1408] hover:bg-[#ffe09a]">CHOOSE PACK</Button></div></div></section>
           </section>
+          <ArchiveVault archive={visibleArchive} activeFilter={archiveFilter} onFilter={setArchiveFilter} totalCount={archive.length} />
         </div>
       </section>
 
@@ -471,6 +482,11 @@ function MoneyTile({ label, value, accent }: { label: string; value: string; acc
   return <div className={`min-w-0 rounded-lg border p-2.5 ${colors[accent]}`}><p className="font-mono text-[8px] tracking-[.1em] opacity-75">{label}</p><p className="mt-1 truncate font-mono text-[11px] font-medium text-white">{value}</p></div>;
 }
 
+function ArchiveVault({ archive, activeFilter, onFilter, totalCount }: { archive: Reward[]; activeFilter: "ALL" | Reward["rarity"]; onFilter: (filter: "ALL" | Reward["rarity"]) => void; totalCount: number }) {
+  const filters: Array<"ALL" | Reward["rarity"]> = ["ALL", "COMMON", "RARE", "EPIC", "LEGEND"];
+  return <section className="mt-6 overflow-hidden rounded-2xl border border-[#4f9bff]/25 bg-[#0b1519] shadow-[0_18px_36px_rgba(0,0,0,.12)]"><div className="flex flex-col justify-between gap-4 border-b border-white/[.08] px-5 py-5 sm:flex-row sm:items-center sm:px-6"><div><p className="eyebrow text-[#74b5ff]">MY ARCHIVE / 入手アイテム管理</p><h2 className="mt-1 font-display text-xl font-semibold text-white">獲得アーカイブ</h2><p className="mt-1 text-xs text-[#8ea0a4]">ガチャで入手した記録を、レアリティごとに確認できます。</p></div><div className="rounded-lg border border-[#4f9bff]/20 bg-[#4f9bff]/[.08] px-3 py-2 font-mono text-xs text-[#8fc5ff]">TOTAL {totalCount} ITEM</div></div><div className="flex flex-wrap gap-2 border-b border-white/[.07] px-5 py-3 sm:px-6">{filters.map((filter) => { const meta = filter === "ALL" ? { label: "ALL", color: "#8fc5ff", border: "#4f9bff55", background: "#4f9bff12" } : RARITY_META[filter]; return <button key={filter} type="button" onClick={() => onFilter(filter)} className={`rounded-md border px-2.5 py-1.5 font-mono text-[10px] transition ${activeFilter === filter ? "shadow-[inset_0_0_0_1px_currentColor]" : "opacity-65 hover:opacity-100"}`} style={{ color: meta.color, borderColor: meta.border, backgroundColor: activeFilter === filter ? meta.background : "transparent" }}>{meta.label}{filter !== "ALL" && <span className="ml-1 opacity-75">{RARITY_META[filter].rate}</span>}</button>; })}</div>{archive.length === 0 ? <div className="grid min-h-36 place-items-center px-6 py-10 text-center"><div><Archive size={22} className="mx-auto text-[#4f9bff]" /><p className="mt-3 font-display text-base font-medium text-white">アーカイブはまだ空です。</p><p className="mt-1 text-xs text-[#84969a]">パックを開封すると、ここでレアリティ別に管理できます。</p></div></div> : <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-4 sm:p-6">{archive.map((reward, index) => { const meta = RARITY_META[reward.rarity]; return <article key={`${reward.id}-${index}`} className="group relative overflow-hidden rounded-xl border bg-white/[.025] p-4 transition hover:-translate-y-0.5" style={{ borderColor: meta.border }}><div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: meta.color }} /><div className="flex items-start justify-between gap-3"><span className="grid h-9 w-9 place-items-center rounded-lg" style={{ backgroundColor: meta.background, color: meta.color }}><RewardIcon type={reward.icon} /></span><span className="rounded-md border px-2 py-1 font-mono text-[9px] tracking-[.08em]" style={{ color: meta.color, borderColor: meta.border, backgroundColor: meta.background }}>{meta.label}</span></div><h3 className="mt-4 font-display text-base font-semibold text-white">{reward.name}</h3><p className="mt-1 text-[11px] leading-relaxed text-[#94a5a8]">{reward.detail}</p><p className="mt-4 font-mono text-[9px] text-[#6f8388]">ARCHIVE #{String(totalCount - index).padStart(3, "0")}</p></article>; })}</div>}</section>;
+}
+
 function ProfilePreview({ profile, asset, onOpen }: { profile: AssetProfile; asset: Asset; onOpen: () => void }) {
   const isCrypto = asset.kind === "Crypto";
   return <section className="panel-card overflow-hidden"><div className="flex items-start justify-between border-b border-white/[.09] px-5 py-4"><div><p className="eyebrow">{isCrypto ? "PROTOCOL SNAPSHOT" : "COMPANY SNAPSHOT"}</p><p className="mt-1 font-display text-lg font-medium text-white">{asset.code} を知る</p></div><Box size={18} className="text-[#c9f34a]" /></div><div className="p-5"><p className="text-sm leading-relaxed text-[#d9e4dd]">{profile.oneLine}</p><div className="mt-4 flex flex-wrap gap-1.5"><span className="rounded-md bg-[#c9f34a]/[.1] px-2 py-1 font-mono text-[9px] text-[#c9f34a]">{profile.archetype}</span><span className="rounded-md bg-white/[.06] px-2 py-1 font-mono text-[9px] text-[#b7c5c2]">{profile.audience}</span></div><div className="mt-4 grid grid-cols-2 gap-2"><div className="rounded-lg bg-white/[.04] p-2.5"><p className="eyebrow">NEWS REACT</p><p className={`mt-1 font-mono text-xs ${profile.sensitivity === "HIGH" ? "text-[#f6c96a]" : "text-[#d9e4dd]"}`}>{profile.sensitivity}</p></div><div className="rounded-lg bg-white/[.04] p-2.5"><p className="eyebrow">RISK FEEL</p><p className={`mt-1 font-mono text-xs ${profile.risk === "HIGH" ? "text-[#ff917f]" : "text-[#d9e4dd]"}`}>{profile.risk}</p></div></div><button onClick={onOpen} className="mt-4 flex w-full items-center justify-between rounded-lg border border-white/[.12] bg-white/[.03] px-3 py-2.5 text-left transition hover:border-[#c9f34a]/40 hover:bg-[#c9f34a]/[.06]"><span className="font-display text-xs font-medium text-white">特徴と注意ポイントを見る</span><ChevronRight size={15} className="text-[#c9f34a]" /></button></div></section>;
@@ -484,6 +500,22 @@ function ProfileModal({ asset, profile, onClose }: { asset: Asset; profile: Asse
 function FactRow({ label, value, accent = "neutral" }: { label: string; value: string; accent?: "lime" | "amber" | "coral" | "neutral" }) {
   const colors = { lime: "text-[#c9f34a]", amber: "text-[#f6c96a]", coral: "text-[#ff917f]", neutral: "text-white" };
   return <div className="flex items-center justify-between gap-3 border-b border-white/[.07] pb-2 last:border-0 last:pb-0"><span className="font-mono text-[9px] tracking-[.11em] text-[#77888c]">{label}</span><span className={`text-right font-mono text-[10px] ${colors[accent]}`}>{value}</span></div>;
+}
+
+function BlueCandlestickPanel({ candles, crypto }: { candles: Candle[]; crypto: boolean }) {
+  const min = Math.min(...candles.map((candle) => candle.low));
+  const max = Math.max(...candles.map((candle) => candle.high));
+  const range = Math.max(max - min, max * 0.01);
+  const frame = { width: 1040, height: 410, left: 64, right: 18, top: 16, priceHeight: 254, volumeTop: 305, volumeHeight: 68 };
+  const chartWidth = frame.width - frame.left - frame.right;
+  const step = chartWidth / candles.length;
+  const maxVolume = Math.max(...candles.map((candle) => candle.volume));
+  const y = (value: number) => frame.top + ((max - value) / range) * frame.priceHeight;
+  const priceDigits = crypto ? 3 : 2;
+  const last = candles.at(-1);
+  const upColor = "#69adff";
+  const downColor = "#2d65b9";
+  return <div className="h-full overflow-x-auto"><svg viewBox={`0 0 ${frame.width} ${frame.height}`} className="h-full min-w-[650px] w-full" role="img" aria-label="青基調のローソク足と出来高を表示する価格チャート"><defs><linearGradient id="blueChartFade" x1="0" x2="0" y1="0" y2="1"><stop stopColor="#4f9bff" stopOpacity=".16" /><stop offset="1" stopColor="#4f9bff" stopOpacity="0" /></linearGradient></defs><rect x={frame.left} y={frame.top} width={chartWidth} height={frame.priceHeight} fill="url(#blueChartFade)" />{[0, 1, 2, 3, 4].map((index) => { const value = max - (range * index) / 4; const axisY = y(value); return <g key={index}><line x1={frame.left} x2={frame.width - frame.right} y1={axisY} y2={axisY} stroke="#8fc5ff" strokeOpacity=".13" strokeWidth="1" /><text x={frame.width - frame.right + 6} y={axisY + 3} fill="#77a3cd" fontFamily="IBM Plex Mono" fontSize="10">{value.toFixed(priceDigits)}</text></g>; })}<line x1={frame.left} x2={frame.width - frame.right} y1={frame.volumeTop - 12} y2={frame.volumeTop - 12} stroke="#8fc5ff" strokeOpacity=".2" strokeWidth="1" /><text x={frame.left} y={frame.volumeTop - 18} fill="#78a3cb" fontFamily="IBM Plex Mono" fontSize="9" letterSpacing="1.3">VOLUME</text><text x={frame.width - frame.right - 80} y={frame.volumeTop - 18} fill="#8fc5ff" fontFamily="IBM Plex Mono" fontSize="9">UP / LIGHT</text><text x={frame.width - frame.right} y={frame.volumeTop - 18} fill="#4c7fb9" fontFamily="IBM Plex Mono" fontSize="9" textAnchor="end">DOWN / DEEP</text>{candles.map((candle, index) => { const rising = candle.close >= candle.open; const color = rising ? upColor : downColor; const center = frame.left + index * step + step / 2; const bodyTop = Math.min(y(candle.open), y(candle.close)); const bodyHeight = Math.max(2, Math.abs(y(candle.open) - y(candle.close))); const volumeHeight = (candle.volume / maxVolume) * frame.volumeHeight; return <g key={`${candle.time}-${index}`}><line x1={center} x2={center} y1={y(candle.high)} y2={y(candle.low)} stroke={color} strokeWidth="1.4" /><rect x={center - step * 0.3} y={bodyTop} width={Math.max(3, step * 0.6)} height={bodyHeight} rx=".6" fill={color} /><rect x={center - step * 0.3} y={frame.volumeTop + frame.volumeHeight - volumeHeight} width={Math.max(3, step * 0.6)} height={volumeHeight} fill={color} fillOpacity=".72" />{(index === 0 || index === candles.length - 1 || index % 8 === 0) && <text x={center} y={frame.volumeTop + frame.volumeHeight + 20} fill="#77a3cd" fontFamily="IBM Plex Mono" fontSize="9" textAnchor="middle">{candle.time}</text>}</g>; })}{last && <g><line x1={frame.left} x2={frame.width - frame.right} y1={y(last.close)} y2={y(last.close)} stroke="#8fc5ff" strokeOpacity=".85" strokeDasharray="3 4" /><rect x={frame.width - frame.right - 48} y={y(last.close) - 9} width="46" height="18" rx="3" fill="#4f9bff" /><text x={frame.width - frame.right - 25} y={y(last.close) + 3.5} fill="#ffffff" fontFamily="IBM Plex Mono" fontSize="8" fontWeight="600" textAnchor="middle">LAST</text></g>}</svg></div>;
 }
 
 function CandlestickPanel({ candles, crypto }: { candles: Candle[]; crypto: boolean }) {

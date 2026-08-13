@@ -117,24 +117,24 @@ const INITIAL_ASSETS: Asset[] = [
 ];
 
 const EVENT_POOL: Omit<MarketEvent, "id" | "age">[] = [
-  { tag: "TECH / POSITIVE", title: "クラウド需要の見通しを上方修正", copy: "企業向け推論需要が予想を上回り、サーバー投資の前倒しが示唆された。AI インフラ関連に買いが広がる。", source: "Pulse Wire", direction: "up", impact: 82, effect: { orca: 0.008, atlas: 0.003 } },
-  { tag: "MACRO / CAUTION", title: "長期金利の上昇でグロースに圧力", copy: "債券利回りの上振れを受け、遠い将来の成長期待で評価される銘柄ほど割引率の影響を受けやすい局面。", source: "Macro Desk", direction: "down", impact: 67, effect: { orca: -0.005, helio: -0.004, nova: -0.003 } },
-  { tag: "ENERGY / POSITIVE", title: "送電網投資の地域計画が承認", copy: "系統増強の予算枠が明確になり、エネルギー貯蔵と配電関連の需要見通しが改善。", source: "Sector Brief", direction: "up", impact: 74, effect: { nori: 0.007, sola: 0.002 } },
-  { tag: "CRYPTO / POSITIVE", title: "主要決済網に検証ノードが追加", copy: "ネットワークの処理能力向上が確認され、オンチェーン取引量の増加期待が強まっている。", source: "Chain Monitor", direction: "up", impact: 88, effect: { atlas: 0.009, nova: 0.005 } },
-  { tag: "HEALTH / POSITIVE", title: "中間解析で有効性シグナルを確認", copy: "試験データが想定を上回り、次段階の開発スケジュールが前進。ヘルスケア・セクターへの注目が高まる。", source: "Clinical Ledger", direction: "up", impact: 76, effect: { helio: 0.008 } },
-  { tag: "MOBILITY / CAUTION", title: "部材の到着遅延が生産計画を圧迫", copy: "供給網の混雑が短期的な納車台数に影響する可能性。販売台数の予測修正が焦点。", source: "Supply Chain Now", direction: "down", impact: 72, effect: { sola: -0.007 } },
-  { tag: "CRYPTO / CAUTION", title: "短期資金の清算が増加", copy: "レバレッジ解消が観測され、流動性が薄い時間帯の価格変動が拡大。材料の消化を待つ局面。", source: "Chain Monitor", direction: "down", impact: 63, effect: { atlas: -0.006, nova: -0.008 } },
-  { tag: "FINANCE / POSITIVE", title: "資本効率の改善計画を公表", copy: "手数料収入とコスト構造の見直しが示され、金融セクターの収益性見通しが改善。", source: "Capital Brief", direction: "up", impact: 71, effect: { vector: 0.007, lumen: 0.002 } },
-  { tag: "MATERIALS / CAUTION", title: "資源先物が反落、在庫水準を注視", copy: "需要見通しの再評価を受けて資源価格が軟調。素材関連には短期的な利益確定が出ている。", source: "Commodity Wire", direction: "down", impact: 69, effect: { terra: -0.008 } },
-  { tag: "GRID / POSITIVE", title: "蓄電・送電案件の入札が前進", copy: "地域インフラの新規案件が開示され、系統関連の受注期待が高まる。", source: "Sector Brief", direction: "up", impact: 79, effect: { quanta: 0.009, nori: 0.003 } },
-  { tag: "CRYPTO / POSITIVE", title: "ロールアップ更新が処理能力を改善", copy: "ネットワーク更新の進展により、取引処理と手数料効率の改善が見込まれる。", source: "Chain Monitor", direction: "up", impact: 84, effect: { rift: 0.011, etheris: 0.004, aura: 0.003 } },
-  { tag: "RWA / POSITIVE", title: "トークン化商品の発行額が増加", copy: "オンチェーン商品化の利用範囲が拡大し、実資産連動領域の資金流入が観測された。", source: "Ledger Review", direction: "up", impact: 73, effect: { mint: 0.009, nova: 0.002 } },
+  { tag: "TECH / POSITIVE", title: "クラウド利用、思ったより伸びそう", copy: "企業のAI利用が予想より広がり、サーバーへの投資も少し早まりそうだ。AIインフラ関連に注目が集まっている。", source: "Pulse Wire", direction: "up", impact: 82, effect: { orca: 0.008, atlas: 0.003 } },
+  { tag: "MACRO / CAUTION", title: "長期金利の上昇で、成長株は少し慎重に", copy: "金利が上がると、将来の成長が期待される銘柄ほど評価がゆれやすくなる。今は少し様子を見たい場面。", source: "Macro Desk", direction: "down", impact: 67, effect: { orca: -0.005, helio: -0.004, nova: -0.003 } },
+  { tag: "ENERGY / POSITIVE", title: "地域の電力網づくり、計画が前進", copy: "送電網を強くする予算の方向性が見え、電力をためる・届ける企業への期待が高まっている。", source: "Sector Brief", direction: "up", impact: 74, effect: { nori: 0.007, sola: 0.002 } },
+  { tag: "CRYPTO / POSITIVE", title: "決済ネットワークが、少し使いやすく", copy: "ネットワークの処理能力が上がり、取引が増える期待が出ている。関連プロトコルに資金が向かいやすい流れ。", source: "Chain Monitor", direction: "up", impact: 88, effect: { atlas: 0.009, nova: 0.005 } },
+  { tag: "HEALTH / POSITIVE", title: "治療研究に、明るい途中経過", copy: "試験データが想定より良く、次の開発ステップへ進みやすくなった。ヘルスケア分野への注目が高まっている。", source: "Clinical Ledger", direction: "up", impact: 76, effect: { helio: 0.008 } },
+  { tag: "MOBILITY / CAUTION", title: "部材の遅れで、生産ペースに注意", copy: "部品の到着が少し遅れ、短期的には納車台数へ影響するかもしれない。次の販売見通しがポイント。", source: "Supply Chain Now", direction: "down", impact: 72, effect: { sola: -0.007 } },
+  { tag: "CRYPTO / CAUTION", title: "短期トレードの整理で、値動きが大きめ", copy: "借りた資金を使う取引の解消が増え、取引が少ない時間帯は価格が動きやすい。いったん落ち着きを待ちたい局面。", source: "Chain Monitor", direction: "down", impact: 63, effect: { atlas: -0.006, nova: -0.008 } },
+  { tag: "FINANCE / POSITIVE", title: "効率よく稼ぐための計画を発表", copy: "手数料の伸ばし方とコストの見直しが示され、金融サービスの利益がよくなる期待が出ている。", source: "Capital Brief", direction: "up", impact: 71, effect: { vector: 0.007, lumen: 0.002 } },
+  { tag: "MATERIALS / CAUTION", title: "資源価格が一服、素材株は様子見", copy: "需要の見通しを見直す動きで、資源価格がやや弱い。素材関連には短期的な売りが出ている。", source: "Commodity Wire", direction: "down", impact: 69, effect: { terra: -0.008 } },
+  { tag: "GRID / POSITIVE", title: "電力をためて届ける新案件が前進", copy: "地域インフラの新しい案件が出てきて、電力網に関わる企業の受注への期待が高まっている。", source: "Sector Brief", direction: "up", impact: 79, effect: { quanta: 0.009, nori: 0.003 } },
+  { tag: "CRYPTO / POSITIVE", title: "ネットワーク更新で、取引がもっと軽く", copy: "処理の速さと手数料の使いやすさが良くなる見込み。関連するネットワークに前向きな空気が広がっている。", source: "Chain Monitor", direction: "up", impact: 84, effect: { rift: 0.011, etheris: 0.004, aura: 0.003 } },
+  { tag: "RWA / POSITIVE", title: "デジタル化した資産の利用が広がる", copy: "現実の資産をデジタルで扱うサービスの利用範囲が広がり、この分野へ資金が入り始めている。", source: "Ledger Review", direction: "up", impact: 73, effect: { mint: 0.009, nova: 0.002 } },
 ];
 
 const STARTING_EVENTS: MarketEvent[] = [
-  { id: "seed-1", tag: "TECH / POSITIVE", title: "クラウド需要の見通しを上方修正", copy: "企業向け推論需要が予想を上回り、サーバー投資の前倒しが示唆された。AI インフラ関連に買いが広がる。", source: "Pulse Wire", direction: "up", impact: 82, effect: { orca: 0.008, atlas: 0.003 }, age: 1 },
-  { id: "seed-2", tag: "MACRO / CAUTION", title: "長期金利の上昇でグロースに圧力", copy: "債券利回りの上振れを受け、遠い将来の成長期待で評価される銘柄ほど割引率の影響を受けやすい局面。", source: "Macro Desk", direction: "down", impact: 67, effect: { orca: -0.005, helio: -0.004 }, age: 4 },
-  { id: "seed-3", tag: "CRYPTO / POSITIVE", title: "主要決済網に検証ノードが追加", copy: "ネットワークの処理能力向上が確認され、オンチェーン取引量の増加期待が強まっている。", source: "Chain Monitor", direction: "up", impact: 88, effect: { atlas: 0.009, nova: 0.005 }, age: 8 },
+  { id: "seed-1", tag: "TECH / POSITIVE", title: "クラウド利用、思ったより伸びそう", copy: "企業のAI利用が予想より広がり、サーバーへの投資も少し早まりそうだ。AIインフラ関連に注目が集まっている。", source: "Pulse Wire", direction: "up", impact: 82, effect: { orca: 0.008, atlas: 0.003 }, age: 1 },
+  { id: "seed-2", tag: "MACRO / CAUTION", title: "長期金利の上昇で、成長株は少し慎重に", copy: "金利が上がると、将来の成長が期待される銘柄ほど評価がゆれやすくなる。今は少し様子を見たい場面。", source: "Macro Desk", direction: "down", impact: 67, effect: { orca: -0.005, helio: -0.004 }, age: 4 },
+  { id: "seed-3", tag: "CRYPTO / POSITIVE", title: "決済ネットワークが、少し使いやすく", copy: "ネットワークの処理能力が上がり、取引が増える期待が出ている。関連プロトコルに資金が向かいやすい流れ。", source: "Chain Monitor", direction: "up", impact: 88, effect: { atlas: 0.009, nova: 0.005 }, age: 8 },
 ];
 
 const REWARDS: Reward[] = [

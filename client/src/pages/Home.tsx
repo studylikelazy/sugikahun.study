@@ -246,6 +246,7 @@ export default function Home() {
   const [activePack, setActivePack] = useState<GachaPack | null>(null);
   const [activeSection, setActiveSection] = useState<NavigationSection>("markets");
   const [archiveFilter, setArchiveFilter] = useState<"ALL" | Reward["rarity"]>("ALL");
+  const [chartCandles, setChartCandles] = useState<Candle[]>(() => createCandles(INITIAL_ASSETS[0], "5M"));
 
   const selected = assets.find((asset) => asset.id === selectedId) ?? assets[0];
   const filteredAssets = tab === "all" ? assets : assets.filter((asset) => asset.kind === tab);
@@ -264,7 +265,6 @@ export default function Home() {
     return { asset, ...holding, value, pnl: value - holding.avgCost * holding.quantity };
   }).filter((position) => position.asset), [assets, holdings]);
   const activeCatalysts = useMemo(() => events.filter((event) => event.effect[selected.id] !== undefined).slice(0, 3), [events, selected.id]);
-  const candles = useMemo(() => createCandles(selected, timeframe), [selected, timeframe]);
   const selectedProfile = COMPANY_PROFILES[selected.id];
   const visibleArchive = archiveFilter === "ALL" ? archive : archive.filter((reward) => reward.rarity === archiveFilter);
 
@@ -276,6 +276,10 @@ export default function Home() {
     window.addEventListener("keydown", closeWithEscape);
     return () => window.removeEventListener("keydown", closeWithEscape);
   }, [profileOpen]);
+
+  useEffect(() => {
+    setChartCandles(createCandles(selected, timeframe));
+  }, [selectedId, timeframe]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -298,6 +302,27 @@ export default function Home() {
     }, 5000);
     return () => window.clearInterval(timer);
   }, [events]);
+
+  useEffect(() => {
+    if (tick === 1) return;
+    setChartCandles((current) => {
+      const previous = current.at(-1);
+      if (!previous) return current;
+      const nextClose = selected.price;
+      const volatility = selected.kind === "Crypto" ? 0.008 : 0.004;
+      const excursion = Math.max(Math.abs(nextClose - previous.close), nextClose * volatility * 0.55);
+      const completed = { ...previous, time: timeframe === "1D" ? `D-${tick}` : `${String(9 + Math.floor(tick / 12)).padStart(2, "0")}:${String((tick * 5) % 60).padStart(2, "0")}` };
+      const next: Candle = {
+        time: "NOW",
+        open: previous.close,
+        high: Math.max(previous.close, nextClose) + excursion * (0.35 + Math.random() * 0.35),
+        low: Math.max(selected.kind === "Crypto" ? 0.05 : 2, Math.min(previous.close, nextClose) - excursion * (0.35 + Math.random() * 0.35)),
+        close: nextClose,
+        volume: Math.round(previous.volume * (0.78 + Math.random() * 0.52)),
+      };
+      return [...current.slice(1, -1), completed, next];
+    });
+  }, [tick, selected.price, selected.kind, timeframe]);
 
   const trade = (side: "buy" | "sell") => {
     const quantity = Math.max(1, Math.floor(tradeQuantity || 1));
@@ -411,8 +436,8 @@ export default function Home() {
               <section className="panel-card relative overflow-hidden p-0">
                 <div className="absolute left-0 top-0 h-full w-1 bg-[#4f9bff]" />
                 <div className="flex flex-col justify-between gap-4 border-b border-white/[.09] px-5 py-5 sm:flex-row sm:items-center"><div className="flex items-center gap-4"><div className="hidden font-mono text-[10px] tracking-[.15em] text-[#74b5ff] sm:block">01</div><div><p className="eyebrow">PRICE ACTION / OHLC + VOLUME</p><p className="mt-1 font-display text-xl font-medium tracking-[-.03em] text-white">{selected.name}<span className="ml-2 font-mono text-xs font-normal text-[#7c8c91]">{selected.kind.toUpperCase()}</span></p></div></div><div className="flex items-center gap-2"><span className="rounded-md bg-white/[.05] px-2 py-1 font-mono text-[9px] text-[#a7b6b6]">CANDLE</span><span className="rounded-md border border-[#4f9bff]/25 bg-[#4f9bff]/[.09] px-2 py-1 font-mono text-[9px] text-[#74b5ff]">TICK / 5S</span></div></div>
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[.07] bg-black/10 px-5 py-3"><div className="flex items-center gap-1 overflow-x-auto rounded-md border border-white/[.08] bg-white/[.025] p-1">{TIMEFRAMES.map((period) => <button key={period} onClick={() => setTimeframe(period)} className={`shrink-0 rounded px-2.5 py-1.5 font-mono text-[10px] transition ${timeframe === period ? "bg-[#4f9bff] text-white" : "text-[#85959a] hover:bg-white/[.07] hover:text-white"}`}>{period}</button>)}</div><div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px]"><span className="text-[#738287]">O <b className="font-medium text-[#d8e1dc]">{formatMoney(candles.at(-1)?.open ?? selected.price, selected.kind === "Crypto" ? 3 : 2)}</b></span><span className="text-[#738287]">H <b className="font-medium text-[#d8e1dc]">{formatMoney(candles.at(-1)?.high ?? selected.price, selected.kind === "Crypto" ? 3 : 2)}</b></span><span className="text-[#738287]">L <b className="font-medium text-[#d8e1dc]">{formatMoney(candles.at(-1)?.low ?? selected.price, selected.kind === "Crypto" ? 3 : 2)}</b></span><span className="text-[#738287]">C <b className={`font-medium ${selected.change >= 0 ? "text-[#5ee8b0]" : "text-[#ff9e9e]"}`}>{formatPrice(selected)}</b></span></div></div>
-                <div className="h-[330px] px-2 pb-3 pt-4 min-[760px]:h-[390px] sm:px-4"><BlueCandlestickPanel candles={candles} crypto={selected.kind === "Crypto"} /></div>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[.07] bg-black/10 px-5 py-3"><div className="flex items-center gap-1 overflow-x-auto rounded-md border border-white/[.08] bg-white/[.025] p-1">{TIMEFRAMES.map((period) => <button key={period} onClick={() => setTimeframe(period)} className={`shrink-0 rounded px-2.5 py-1.5 font-mono text-[10px] transition ${timeframe === period ? "bg-[#4f9bff] text-white" : "text-[#85959a] hover:bg-white/[.07] hover:text-white"}`}>{period}</button>)}</div><div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px]"><span className="text-[#738287]">O <b className="font-medium text-[#d8e1dc]">{formatMoney(chartCandles.at(-1)?.open ?? selected.price, selected.kind === "Crypto" ? 3 : 2)}</b></span><span className="text-[#738287]">H <b className="font-medium text-[#d8e1dc]">{formatMoney(chartCandles.at(-1)?.high ?? selected.price, selected.kind === "Crypto" ? 3 : 2)}</b></span><span className="text-[#738287]">L <b className="font-medium text-[#d8e1dc]">{formatMoney(chartCandles.at(-1)?.low ?? selected.price, selected.kind === "Crypto" ? 3 : 2)}</b></span><span className="text-[#738287]">C <b className={`font-medium ${selected.change >= 0 ? "text-[#5ee8b0]" : "text-[#ff9e9e]"}`}>{formatPrice(selected)}</b></span></div></div>
+                <div className="h-[330px] px-2 pb-3 pt-4 min-[760px]:h-[390px] sm:px-4"><BlueCandlestickPanel candles={chartCandles} crypto={selected.kind === "Crypto"} /></div>
               </section>
 
               <section className="panel-card overflow-hidden">

@@ -74,6 +74,13 @@ type Reward = {
   icon: "signal" | "news" | "radar" | "badge";
 };
 
+type ArchiveEffect = {
+  key: "credit" | "news" | "range" | "brief";
+  label: string;
+  description: string;
+  creditBonus: number;
+};
+
 type AssetProfile = {
   oneLine: string;
   archetype: string;
@@ -150,6 +157,13 @@ const RARITY_META: Record<Reward["rarity"], { label: string; rate: string; color
   RARE: { label: "RARE", rate: "30%", color: "#72d3ff", border: "#38bdf855", background: "#38bdf812" },
   EPIC: { label: "EPIC", rate: "9%", color: "#b9a4ff", border: "#9b7dff55", background: "#9b7dff12" },
   LEGEND: { label: "LEGEND", rate: "1%", color: "#ffd178", border: "#f6c96a66", background: "#f6c96a12" },
+};
+
+const ARCHIVE_EFFECTS: Record<Reward["rarity"], ArchiveEffect> = {
+  COMMON: { key: "credit", label: "RECORD BOOST", description: "取引を記録するたび、Archive Credit を +5 追加で獲得。", creditBonus: 5 },
+  RARE: { key: "news", label: "NEWS LENS", description: "選択中の銘柄に関係するニュースを、短い要点として優先表示。", creditBonus: 0 },
+  EPIC: { key: "range", label: "RANGE SCOPE", description: "チャートの直近レンジを数値化し、値動きの大きさを読みやすくする。", creditBonus: 0 },
+  LEGEND: { key: "brief", label: "THESIS BRIEF", description: "選択中銘柄に効いている理由を、ひとつの短いブリーフとして表示。", creditBonus: 0 },
 };
 
 const COMPANY_PROFILES: Record<string, AssetProfile> = {
@@ -247,6 +261,7 @@ export default function Home() {
   const [activeSection, setActiveSection] = useState<NavigationSection>("markets");
   const [archiveFilter, setArchiveFilter] = useState<"ALL" | Reward["rarity"]>("ALL");
   const [chartCandles, setChartCandles] = useState<Candle[]>(() => createCandles(INITIAL_ASSETS[0], "5M"));
+  const [activeArchiveId, setActiveArchiveId] = useState<string | null>(null);
 
   const selected = assets.find((asset) => asset.id === selectedId) ?? assets[0];
   const filteredAssets = tab === "all" ? assets : assets.filter((asset) => asset.kind === tab);
@@ -267,6 +282,8 @@ export default function Home() {
   const activeCatalysts = useMemo(() => events.filter((event) => event.effect[selected.id] !== undefined).slice(0, 3), [events, selected.id]);
   const selectedProfile = COMPANY_PROFILES[selected.id];
   const visibleArchive = archiveFilter === "ALL" ? archive : archive.filter((reward) => reward.rarity === archiveFilter);
+  const activeArchive = archive.find((reward) => reward.id === activeArchiveId) ?? null;
+  const activeEffect = activeArchive ? ARCHIVE_EFFECTS[activeArchive.rarity] : null;
 
   useEffect(() => {
     if (!profileOpen) return;
@@ -337,14 +354,16 @@ export default function Home() {
         ...current,
         [selected.id]: { quantity: newQuantity, avgCost: (existing.avgCost * existing.quantity + value) / newQuantity },
       }));
-      setCredits((current) => current + 25);
-      toast.success(`${selected.code} を ${quantity} 単位購入`, { description: `取引の記録で Archive Credit +25` });
+      const creditGain = 25 + (activeEffect?.creditBonus ?? 0);
+      setCredits((current) => current + creditGain);
+      toast.success(`${selected.code} を ${quantity} 単位購入`, { description: `取引の記録で Archive Credit +${creditGain}` });
     } else {
       if (existing.quantity < quantity) return toast.error("保有数量が不足しています", { description: `${selected.code} の保有: ${existing.quantity} 単位` });
       setCash((current) => current + value);
       setHoldings((current) => ({ ...current, [selected.id]: { ...existing, quantity: existing.quantity - quantity } }));
-      setCredits((current) => current + 15);
-      toast.success(`${selected.code} を ${quantity} 単位売却`, { description: `取引の記録で Archive Credit +15` });
+      const creditGain = 15 + (activeEffect?.creditBonus ?? 0);
+      setCredits((current) => current + creditGain);
+      toast.success(`${selected.code} を ${quantity} 単位売却`, { description: `取引の記録で Archive Credit +${creditGain}` });
     }
   };
 
@@ -430,6 +449,7 @@ export default function Home() {
           <section className="mt-5 flex flex-wrap items-center gap-2 rounded-xl border border-white/[.09] bg-white/[.025] px-4 py-3"><span className="mr-1 font-mono text-[9px] tracking-[.14em] text-[#60a5fa]">PLAY LOOP</span><span className="rounded-md bg-white/[.06] px-2.5 py-1 font-mono text-[10px] text-white">1. ニュースを読む</span><ChevronRight size={13} className="text-[#718187]" /><span className="rounded-md bg-white/[.06] px-2.5 py-1 font-mono text-[10px] text-white">2. 特徴を知る</span><ChevronRight size={13} className="text-[#718187]" /><span className="rounded-md bg-[#4f9bff]/[.14] px-2.5 py-1 font-mono text-[10px] text-[#74b5ff]">3. 売買する</span><span className="ml-auto font-mono text-[9px] text-[#718187]">読み終えたら、決めよう。</span></section>
 
           <div id="portfolio" className="scroll-mt-24"><AssetOverview cash={cash} marketValue={marketValue} equity={equity} pnl={positionPnL} positions={positions} /></div>
+          <ArchiveModuleRack archive={archive} activeArchive={activeArchive} activeEffect={activeEffect} onActivate={(reward) => { setActiveArchiveId(reward.id); toast.success(`${reward.name} を有効化`, { description: `${ARCHIVE_EFFECTS[reward.rarity].label} が利用できます。` }); }} onDeactivate={() => setActiveArchiveId(null)} candles={chartCandles} catalysts={activeCatalysts} />
 
           <div className="mt-5 grid gap-6 min-[760px]:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_370px]">
             <div className="min-w-0 space-y-6">
@@ -510,6 +530,12 @@ function AssetOverview({ cash, marketValue, equity, pnl, positions }: { cash: nu
 function MoneyTile({ label, value, accent }: { label: string; value: string; accent: "blue" | "green" | "red" }) {
   const colors = { blue: "border-[#4f9bff]/28 bg-[#4f9bff]/[.08] text-[#74b5ff]", green: "border-[#36d399]/28 bg-[#36d399]/[.08] text-[#36d399]", red: "border-[#ff7474]/28 bg-[#ff7474]/[.08] text-[#ff9292]" };
   return <div className={`min-w-0 rounded-lg border p-2.5 ${colors[accent]}`}><p className="font-mono text-[8px] tracking-[.1em] opacity-75">{label}</p><p className="mt-1 truncate font-mono text-[11px] font-medium text-white">{value}</p></div>;
+}
+
+function ArchiveModuleRack({ archive, activeArchive, activeEffect, onActivate, onDeactivate, candles, catalysts }: { archive: Reward[]; activeArchive: Reward | null; activeEffect: ArchiveEffect | null; onActivate: (reward: Reward) => void; onDeactivate: () => void; candles: Candle[]; catalysts: MarketEvent[] }) {
+  const range = candles.length ? ((Math.max(...candles.map((candle) => candle.high)) - Math.min(...candles.map((candle) => candle.low))) / Math.max(0.01, candles.at(-1)?.close ?? 1)) * 100 : 0;
+  const insight = activeEffect?.key === "credit" ? "次の売買では、通常のCreditに +5 が追加されます。" : activeEffect?.key === "news" ? `注目ニュース: ${catalysts[0]?.title ?? "選択中銘柄へのニュースを待機中"}` : activeEffect?.key === "range" ? `直近レンジ: ${range.toFixed(2)}% — 数字が大きいほど、いまの動きが大きめです。` : activeEffect?.key === "brief" ? `いまの要因: ${catalysts[0]?.copy ?? "選択中銘柄への材料を待機中"}` : "アーカイブを入手すると、ここで市場を変えない分析モジュールとして使えます。";
+  return <section className="mt-5 overflow-hidden rounded-2xl border border-[#4f9bff]/25 bg-[#0b1519]"><div className="flex flex-col gap-4 border-b border-white/[.08] px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="eyebrow text-[#74b5ff]">ARCHIVE MODULE / 効果を選ぶ</p><p className="mt-1 font-display text-lg font-semibold text-white">入手記録を、分析に使う。</p><p className="mt-1 text-[11px] leading-relaxed text-[#84979a]">どの効果も価格・ニュース・約定には影響しません。</p></div>{activeArchive ? <button type="button" onClick={onDeactivate} className="rounded-lg border border-[#4f9bff]/30 bg-[#4f9bff]/[.09] px-3 py-2 font-mono text-[10px] text-[#9bcaff] transition hover:bg-[#4f9bff]/[.16]">EJECT MODULE</button> : <span className="rounded-lg border border-white/[.1] bg-white/[.04] px-3 py-2 font-mono text-[10px] text-[#8ca0a3]">NO MODULE</span>}</div>{activeArchive && activeEffect ? <div className="grid gap-3 border-b border-white/[.07] bg-[#4f9bff]/[.06] p-4 sm:grid-cols-[auto_1fr]"><span className="grid h-10 w-10 place-items-center rounded-lg" style={{ color: RARITY_META[activeArchive.rarity].color, backgroundColor: RARITY_META[activeArchive.rarity].background }}><RewardIcon type={activeArchive.icon} /></span><div><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-[10px] tracking-[.12em] text-[#8fc5ff]">ACTIVE / {activeEffect.label}</span><span className="rounded border px-1.5 py-0.5 font-mono text-[8px]" style={{ color: RARITY_META[activeArchive.rarity].color, borderColor: RARITY_META[activeArchive.rarity].border }}>{activeArchive.rarity}</span></div><p className="mt-1 text-sm font-medium text-white">{activeArchive.name}</p><p className="mt-1 text-[11px] leading-relaxed text-[#b7c8ca]">{insight}</p></div></div> : null}<div className="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-4">{archive.length === 0 ? <p className="sm:col-span-2 lg:col-span-4 text-sm text-[#8ca0a3]">まだ使えるアーカイブはありません。ガチャで入手すると、有効化ボタンがここに表示されます。</p> : archive.slice(0, 4).map((reward, index) => { const effect = ARCHIVE_EFFECTS[reward.rarity]; const active = activeArchive?.id === reward.id; return <div key={`${reward.id}-${index}`} className={`rounded-xl border p-3 ${active ? "border-[#4f9bff]/50 bg-[#4f9bff]/[.1]" : "border-white/[.09] bg-white/[.025]"}`}><div className="flex items-center justify-between gap-2"><span className="font-mono text-[9px]" style={{ color: RARITY_META[reward.rarity].color }}>{reward.rarity}</span><RewardIcon type={reward.icon} /></div><p className="mt-3 font-display text-sm font-semibold text-white">{reward.name}</p><p className="mt-1 min-h-[32px] text-[10px] leading-relaxed text-[#90a4a6]">{effect.label}: {effect.description}</p><button type="button" onClick={() => onActivate(reward)} className={`mt-3 w-full rounded-md px-2 py-2 font-mono text-[9px] tracking-[.08em] transition ${active ? "bg-[#4f9bff] text-white" : "border border-[#4f9bff]/30 text-[#8fc5ff] hover:bg-[#4f9bff]/[.12]"}`}>{active ? "ACTIVE" : "ACTIVATE"}</button></div>; })}</div></section>;
 }
 
 function ArchiveVault({ archive, activeFilter, onFilter, totalCount }: { archive: Reward[]; activeFilter: "ALL" | Reward["rarity"]; onFilter: (filter: "ALL" | Reward["rarity"]) => void; totalCount: number }) {

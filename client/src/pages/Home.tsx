@@ -68,7 +68,7 @@ type MarketEvent = {
 };
 
 type Holding = { quantity: number; avgCost: number };
-type Rarity = "COMMON" | "RARE" | "EPIC" | "LEGEND" | "MYTHIC";
+type Rarity = "COMMON" | "RARE" | "EPIC" | "LEGEND" | "MYTHIC" | "LIMITED";
 type Reward = {
   id: string;
   name: string;
@@ -89,7 +89,7 @@ type SeriesProgress = { pack: GachaPack; title: string; subtitle: string; owned:
 type RoomStatus = "offline" | "connecting" | "connected" | "setup";
 type RoomActivity = { id: string; player: string; action: string; createdAt: number };
 type RoomParticipant = { id: string; name: string; status: "online" | "away"; level?: number; archiveCount?: number; missionCount?: number };
-type BotAction = { assetId: string; side: "WATCH" | "ADD" | "TRIM"; reason: string; confidence: number };
+type BotAction = { assetId: string; side: "WATCH" | "ADD" | "TRIM"; reason: string; confidence: number; impact: number };
 type BotTrader = { id: string; name: string; role: string; strategy: string; accent: string; action: BotAction };
 type QuestKey = "news" | "trade" | "archive";
 type QuestProgress = Record<QuestKey, number>;
@@ -150,7 +150,7 @@ const BOT_ROSTER: Array<Omit<BotTrader, "action">> = [
   { id: "ember", name: "EMBER", role: "MACRO WATCH", strategy: "金利とテーマの交差を観察", accent: "#f6c96a" },
   { id: "mori", name: "MORI", role: "CALM HOLDER", strategy: "短期のノイズを避ける", accent: "#b9a4ff" },
 ];
-const ARCHIVE_SHARD_VALUE: Record<Rarity, number> = { COMMON: 2, RARE: 5, EPIC: 12, LEGEND: 30, MYTHIC: 120 };
+const ARCHIVE_SHARD_VALUE: Record<Rarity, number> = { COMMON: 2, RARE: 5, EPIC: 12, LEGEND: 30, MYTHIC: 120, LIMITED: 320 };
 
 function readSavedGame(): SavedGame | null {
   if (typeof window === "undefined") return null;
@@ -229,6 +229,7 @@ const REWARDS: Reward[] = [
   { id: "radar", name: "Second Horizon", rarity: "EPIC", detail: "二次的な市場波及を追うための観測レコード。", accent: "#cf9cff", icon: "radar" },
   { id: "thesis", name: "Thesis 01", rarity: "LEGEND", detail: "仮説を持続させた記録。純粋にコレクション用のレアバッジ。", accent: "#f6c96a", icon: "badge" },
   { id: "pulse-zero", name: "Pulse Zero", rarity: "MYTHIC", detail: "ニュース、価格、仮説の接点を記した最上位アーカイブ。", accent: "#c9f34a", icon: "badge" },
+  { id: "signal-limited", name: "First Pulse / Limited", rarity: "LIMITED", detail: "MARKET PULSEの最初の価格波形を封じた、季節限定のシグナル・レコード。", accent: "#ff6ee7", icon: "badge" },
 ];
 
 const RARITY_META: Record<Reward["rarity"], { label: string; rate: string; color: string; border: string; background: string }> = {
@@ -237,6 +238,7 @@ const RARITY_META: Record<Reward["rarity"], { label: string; rate: string; color
   EPIC: { label: "EPIC", rate: "8.5%", color: "#b9a4ff", border: "#9b7dff55", background: "#9b7dff12" },
   LEGEND: { label: "LEGEND", rate: "1.8%", color: "#ffd178", border: "#f6c96a66", background: "#f6c96a12" },
   MYTHIC: { label: "MYTHIC", rate: "0.2%", color: "#c9f34a", border: "#c9f34a88", background: "#c9f34a18" },
+  LIMITED: { label: "LIMITED", rate: "0.02%", color: "#ff6ee7", border: "#ff6ee799", background: "#ff6ee720" },
 };
 
 const ARCHIVE_EFFECTS: Record<Reward["rarity"], ArchiveEffect> = {
@@ -245,6 +247,7 @@ const ARCHIVE_EFFECTS: Record<Reward["rarity"], ArchiveEffect> = {
   EPIC: { key: "range", label: "RANGE SCOPE", description: "チャートの直近レンジを数値化し、値動きの大きさを読みやすくする。", creditBonus: 0 },
   LEGEND: { key: "brief", label: "THESIS BRIEF", description: "選択中銘柄に効いている理由を、ひとつの短いブリーフとして表示。", creditBonus: 0 },
   MYTHIC: { key: "bot", label: "BOT LINK", description: "BOTの観察メモと自分の判断を見比べる、最上位の分析リンク。市場価格には影響しません。", creditBonus: 0 },
+  LIMITED: { key: "bot", label: "LIMITED FLOW", description: "BOT注文とニュースの合流点を強調する、期間限定の分析シグナル。アーカイブ自体は市場に影響しません。", creditBonus: 0 },
 };
 
 const PACK_SERIES: Record<GachaPack["id"], { title: string; subtitle: string }> = {
@@ -280,6 +283,7 @@ const GACHA_PACKS: GachaPack[] = [
     { id: "chain", name: "Chain Atlas", rarity: "EPIC", detail: "ネットワーク地図を集めたスペシャル記録。", accent: "#7ed8ff", icon: "badge" },
     { id: "sector-legend", name: "Sector Zero", rarity: "LEGEND", detail: "業界のつながりを見通す、限定アーカイブ。", accent: "#7ed8ff", icon: "badge" },
     { id: "sector-mythic", name: "Sector Singularity", rarity: "MYTHIC", detail: "業界をまたぐ因果を記録した、最上位セクターファイル。", accent: "#c9f34a", icon: "badge" },
+    { id: "sector-limited", name: "Sector Crown / Limited", rarity: "LIMITED", detail: "複数のテーマが交差した瞬間を残す、限定セクター・ファイル。", accent: "#ff6ee7", icon: "badge" },
   ] },
   { id: "style", label: "PULSE ID", kicker: "STYLE", cost: 220, description: "自分のトレードスタイルを彩るプロフィール記録。", accent: "#cf9cff", icon: "badge", rewards: [
     { id: "reader", name: "News Reader", rarity: "COMMON", detail: "ニュースを読むプレイヤーのIDカード。", accent: "#cf9cff", icon: "news" },
@@ -287,6 +291,7 @@ const GACHA_PACKS: GachaPack[] = [
     { id: "drift", name: "Trend Drifter", rarity: "EPIC", detail: "流れを追う感覚を映したプロフィール記録。", accent: "#cf9cff", icon: "radar" },
     { id: "midnight", name: "Midnight Thesis", rarity: "LEGEND", detail: "自分の仮説を持つ人のための限定ID。", accent: "#cf9cff", icon: "badge" },
     { id: "style-mythic", name: "Signal Persona", rarity: "MYTHIC", detail: "仮説と判断の軸を結んだ、最上位プロフィール記録。", accent: "#c9f34a", icon: "badge" },
+    { id: "style-limited", name: "Afterimage / Limited", rarity: "LIMITED", detail: "判断の痕跡をネオンに刻む、期間限定のプロフィール記録。", accent: "#ff6ee7", icon: "badge" },
   ] },
   { id: "macro", label: "MACRO FLASH", kicker: "WORLD", cost: 180, description: "世界の流れを短く読む、マクロ視点のアーカイブ。", accent: "#7ab8ff", icon: "signal", rewards: [
     { id: "yield-note", name: "Yield Note", rarity: "COMMON", detail: "金利の変化を記録する、短いマクロノート。", accent: "#7ab8ff", icon: "signal" },
@@ -294,6 +299,7 @@ const GACHA_PACKS: GachaPack[] = [
     { id: "global-tape", name: "Global Tape", rarity: "EPIC", detail: "国境をまたぐ流れを追う、編集デスクのテープ。", accent: "#7ab8ff", icon: "radar" },
     { id: "macro-zero", name: "Macro Zero", rarity: "LEGEND", detail: "市場全体の前提を読むための、限定マクロ記録。", accent: "#7ab8ff", icon: "badge" },
     { id: "macro-mythic", name: "Worldline", rarity: "MYTHIC", detail: "世界の変化と市場の接点を記した、最上位マクロ記録。", accent: "#c9f34a", icon: "badge" },
+    { id: "macro-limited", name: "Event Horizon / Limited", rarity: "LIMITED", detail: "世界の材料が一点へ収束する瞬間を封じた、限定マクロ記録。", accent: "#ff6ee7", icon: "badge" },
   ] },
   { id: "chart", label: "CHART LAB", kicker: "TACTIC", cost: 200, description: "価格の形と動きを読む、チャート観測のコレクション。", accent: "#5ee8b0", icon: "radar", rewards: [
     { id: "candle-note", name: "Candle Note", rarity: "COMMON", detail: "ローソク足の形を記録する、観測メモ。", accent: "#5ee8b0", icon: "signal" },
@@ -301,6 +307,7 @@ const GACHA_PACKS: GachaPack[] = [
     { id: "breakout-frame", name: "Breakout Frame", rarity: "EPIC", detail: "価格が動き出す場面を記した、フレーム記録。", accent: "#5ee8b0", icon: "radar" },
     { id: "tape-master", name: "Tape Master", rarity: "LEGEND", detail: "値動きのリズムを見通す、限定チャートレコード。", accent: "#5ee8b0", icon: "badge" },
     { id: "chart-mythic", name: "Price Aurora", rarity: "MYTHIC", detail: "値動きと因果が重なる瞬間を記した、最上位チャート記録。", accent: "#c9f34a", icon: "badge" },
+    { id: "chart-limited", name: "Zero Print / Limited", rarity: "LIMITED", detail: "市場の切り替わりを一瞬で記録した、限定チャート・プリント。", accent: "#ff6ee7", icon: "badge" },
   ] },
 ];
 
@@ -341,7 +348,11 @@ function deriveBotActions(events: MarketEvent[], assets: Asset[]): BotTrader[] {
     const affectedIds = Object.keys(event?.effect ?? {});
     const assetId = affectedIds[index % Math.max(1, affectedIds.length)] ?? assets[index % assets.length]?.id ?? "orca";
     const side: BotAction["side"] = event?.direction === "up" ? "ADD" : event?.direction === "down" ? "TRIM" : "WATCH";
-    return { ...bot, action: { assetId, side, reason: event?.title ?? "材料を観察中", confidence: Math.min(96, Math.max(48, (event?.impact ?? 52) + index * 3)) } };
+    const confidence = Math.min(96, Math.max(48, (event?.impact ?? 52) + index * 3));
+    const roleWeight = [1.12, 0.86, 1.04, 0.72][index] ?? 1;
+    const size = (0.00055 + confidence * 0.000016) * roleWeight;
+    const impact = side === "ADD" ? size : side === "TRIM" ? -size : 0;
+    return { ...bot, action: { assetId, side, reason: event?.title ?? "材料を観察中", confidence, impact } };
   });
 }
 
@@ -414,6 +425,9 @@ export default function Home() {
     return { asset, ...holding, value, pnl: value - holding.avgCost * holding.quantity };
   }).filter((position) => position.asset), [assets, holdings]);
   const activeCatalysts = useMemo(() => events.filter((event) => event.effect[selected.id] !== undefined).slice(0, 3), [events, selected.id]);
+  const selectedNewsImpact = useMemo(() => activeCatalysts.reduce((sum, event) => sum + (event.effect[selected.id] ?? 0) * Math.max(0.18, 1 - event.age * 0.11), 0), [activeCatalysts, selected.id]);
+  const selectedBotImpact = useMemo(() => botFeed.filter((bot) => bot.action.assetId === selected.id).reduce((sum, bot) => sum + bot.action.impact, 0), [botFeed, selected.id]);
+  const selectedBotOrders = useMemo(() => botFeed.filter((bot) => bot.action.assetId === selected.id), [botFeed, selected.id]);
   const selectedProfile = COMPANY_PROFILES[selected.id];
   const visibleArchive = archiveFilter === "ALL" ? archive : archive.filter((reward) => reward.rarity === archiveFilter);
   const activeArchive = archive.find((reward) => reward.id === activeArchiveId) ?? null;
@@ -490,12 +504,26 @@ export default function Home() {
   }, [gachaOpen, gachaResult]);
 
   useEffect(() => {
+    if (import.meta.env.PROD || new URLSearchParams(window.location.search).get("demo") !== "limited") return;
+    const reward = GACHA_PACKS.flatMap((pack) => pack.rewards).find((entry) => entry.rarity === "LIMITED");
+    if (!reward) return;
+    setOpeningPack(GACHA_PACKS[0]);
+    setGachaResult(reward);
+    setIsOpening(true);
+    const timer = window.setTimeout(() => setIsOpening(false), 8000);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
     const timer = window.setInterval(() => {
+      const botOrders = deriveBotActions(events, assets);
+      setBotFeed(botOrders);
       setAssets((current) =>
         current.map((asset) => {
           const weightedEffect = events.reduce((sum, event) => sum + (event.effect[asset.id] ?? 0) * Math.max(0.18, 1 - event.age * 0.11), 0);
+          const botImpact = botOrders.filter((bot) => bot.action.assetId === asset.id).reduce((sum, bot) => sum + bot.action.impact, 0);
           const microMove = (Math.random() - 0.5) * (asset.kind === "Crypto" ? 0.028 : 0.014);
-          const move = weightedEffect * 0.82 + microMove;
+          const move = weightedEffect * 0.76 + botImpact + microMove;
           const nextPrice = Math.max(asset.kind === "Crypto" ? 0.08 : 5, asset.price * (1 + move));
           const opening = asset.history[0];
           return { ...asset, price: nextPrice, change: ((nextPrice - opening) / opening) * 100, history: [...asset.history.slice(-23), nextPrice] };
@@ -509,7 +537,7 @@ export default function Home() {
       setTick((value) => value + 1);
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [events]);
+  }, [events, assets]);
 
   useEffect(() => {
     if (tick === 1) return;
@@ -579,15 +607,15 @@ export default function Home() {
     const roll = Math.random();
     const streak = packStreak[pack.id] ?? 0;
     const byRarity = (rarity: Rarity) => pack.rewards.find((entry) => entry.rarity === rarity) ?? pack.rewards[0];
-    const reward = streak >= 9 ? byRarity("LEGEND") : roll > 0.998 ? byRarity("MYTHIC") : roll > 0.98 ? byRarity("LEGEND") : roll > 0.895 ? byRarity("EPIC") : roll > 0.575 ? byRarity("RARE") : byRarity("COMMON");
+    const reward = streak >= 9 ? byRarity("LEGEND") : roll > 0.9998 ? byRarity("LIMITED") : roll > 0.9978 ? byRarity("MYTHIC") : roll > 0.9798 ? byRarity("LEGEND") : roll > 0.8948 ? byRarity("EPIC") : roll > 0.5748 ? byRarity("RARE") : byRarity("COMMON");
     const duplicate = archive.some((entry) => entry.id === reward.id);
     const shardGain = duplicate ? ARCHIVE_SHARD_VALUE[reward.rarity] : 0;
     setCredits((current) => current - pack.cost);
-    setPackStreak((current) => ({ ...current, [pack.id]: reward.rarity === "LEGEND" || reward.rarity === "MYTHIC" ? 0 : streak + 1 }));
+    setPackStreak((current) => ({ ...current, [pack.id]: ["LEGEND", "MYTHIC", "LIMITED"].includes(reward.rarity) ? 0 : streak + 1 }));
     setOpeningPack(pack);
-    setIsOpening(true);
-    window.setTimeout(() => setIsOpening(false), 1450);
     setGachaResult(reward);
+    setIsOpening(true);
+    window.setTimeout(() => setIsOpening(false), reward.rarity === "LIMITED" ? 3400 : reward.rarity === "MYTHIC" ? 2500 : reward.rarity === "LEGEND" ? 1900 : 1450);
     if (duplicate) setArchiveShards((current) => current + shardGain);
     else setArchive((current) => [reward, ...current]);
     toast.success(duplicate ? `${reward.name} は重複しました` : `${RARITY_META[reward.rarity].label} を獲得`, { description: duplicate ? `Archive Shard +${shardGain} に変換しました。` : `${reward.name} をアーカイブに保存しました。` });
@@ -722,7 +750,8 @@ export default function Home() {
         <div className="px-5 py-6 sm:px-8 lg:px-10 lg:py-8">
           <QuestDeck level={level} xp={xp} levelProgress={levelProgress} nextLevelXp={nextLevelXp} quests={questProgress} completeCount={completeQuestCount} tutorialStep={tutorialStep} onGo={(key) => { if (key === "news") navigateTo("newsflow"); else if (key === "trade") document.getElementById("trade-desk")?.scrollIntoView({ behavior: "smooth", block: "center" }); else document.getElementById("archive-vault")?.scrollIntoView({ behavior: "smooth", block: "center" }); }} />
           <BotTraderDesk bots={botFeed} assets={assets} trust={botTrust} onSync={syncWithBot} />
-          <section id="markets" className="relative scroll-mt-24 overflow-hidden rounded-2xl border border-[#4f9bff]/25 bg-[#111d21] shadow-[0_30px_60px_rgba(0,0,0,.2)]">
+          <MarketImpactRibbon asset={selected} newsImpact={selectedNewsImpact} botImpact={selectedBotImpact} orders={selectedBotOrders} />
+          <section id="markets" className="relative scroll-mt-24 overflow-hidden rounded-md border border-[#4f9bff]/25 border-l-2 border-l-[#c9f34a] bg-[#111d21] shadow-[0_30px_60px_rgba(0,0,0,.2)]">
             <img src={HERO_IMAGE} alt="市場データを表現した抽象的な夜の金融ニュースルーム" className="absolute inset-0 h-full w-full object-cover opacity-55" />
             <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(8,17,21,.98)_0%,rgba(8,17,21,.88)_40%,rgba(8,17,21,.33)_100%)]" />
             <div className="relative grid min-h-[245px] gap-6 p-6 min-[680px]:grid-cols-[1fr_310px] sm:p-8 lg:p-9">
@@ -768,6 +797,7 @@ export default function Home() {
           <div id="archive-vault"><ArchiveVault archive={visibleArchive} activeFilter={archiveFilter} onFilter={setArchiveFilter} totalCount={archive.length} shards={archiveShards} onCraft={craftMythic} /></div>
           <ArchiveForge shards={archiveShards} onCraft={craftMythic} />
           <PackProtectionPanel streaks={packStreak} />
+          <LimitedDropBanner />
           <SeriesCollectionDeck series={seriesProgress} />
           <SharedRoomPanel playerName={playerName} roomCode={roomCode} roomStatus={roomStatus} participants={roomParticipants} activity={roomActivity} onPlayerName={setPlayerName} onRoomCode={setRoomCode} onConnect={connectRoom} onDisconnect={disconnectRoom} />
           <FloorLeaderboard playerName={playerName} level={level} archiveCount={archive.length} missionCount={completeQuestCount} roomStatus={roomStatus} participants={roomParticipants} />
@@ -778,7 +808,7 @@ export default function Home() {
 
       {gachaOpen && <div role="dialog" aria-modal="true" aria-label="Archive Gacha" className="fixed inset-0 z-50 grid place-items-center bg-[#030708]/75 p-4 backdrop-blur-md"><div className="gacha-modal relative w-full max-w-2xl overflow-hidden rounded-2xl border border-[#d19b4b]/35 bg-[#15120d] p-6 shadow-2xl sm:p-8"><button onClick={() => setGachaOpen(false)} className="absolute right-4 top-4 rounded-full p-2 text-[#a98d70] transition hover:bg-white/10 hover:text-white" aria-label="閉じる"><X size={18} /></button>{!gachaResult ? <div><div className="text-center"><p className="eyebrow text-[#f6c96a]">ARCHIVE PACKS</p><h2 className="mt-3 font-display text-3xl font-semibold text-white">今日は、何を集める？</h2><p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[#b8a08a]">気になるパックを選ぶだけ。全部、プロフィールを彩るコレクションです。</p></div><div className="mt-7 grid gap-3 sm:grid-cols-3">{GACHA_PACKS.map((pack) => <button key={pack.id} onClick={() => setActivePack(pack)} className={`group rounded-xl border p-4 text-left transition hover:-translate-y-0.5 ${activePack?.id === pack.id ? "bg-white/[.08]" : "bg-black/10 hover:bg-white/[.05]"}`} style={{ borderColor: activePack?.id === pack.id ? pack.accent : `${pack.accent}4a` }}><div className="flex items-center justify-between"><span className="grid h-9 w-9 place-items-center rounded-lg" style={{ backgroundColor: `${pack.accent}18`, color: pack.accent }}><RewardIcon type={pack.icon} /></span><span className="font-mono text-[9px]" style={{ color: pack.accent }}>{pack.kicker}</span></div><p className="mt-4 font-display text-base font-semibold text-white">{pack.label}</p><p className="mt-1 min-h-[38px] text-[11px] leading-relaxed text-[#a58d76]">{pack.description}</p><p className="mt-4 font-mono text-xs" style={{ color: pack.accent }}>{pack.cost} CREDIT</p></button>)}</div>{activePack && <div className="mt-5 flex flex-col items-center justify-between gap-3 rounded-xl border border-[#d19b4b]/20 bg-black/15 p-4 sm:flex-row"><p className="text-center text-xs text-[#b8a08a]">選択中: <span className="font-semibold text-white">{activePack.label}</span>。市場には影響しません。</p><Button onClick={() => pullArchive(activePack)} className="h-11 bg-[#f6c96a] px-6 font-display text-[11px] font-semibold tracking-[.08em] text-[#1d1509] hover:bg-[#ffe09a]">{activePack.cost} CREDIT で開封</Button></div>}<p className="mt-4 text-center text-[10px] text-[#8c735c]">過去のアーカイブ: {archive.length} 件</p></div> : <div className="py-6 text-center"><div className="mx-auto grid h-20 w-20 place-items-center rounded-2xl border" style={{ color: gachaResult.accent, borderColor: `${gachaResult.accent}66`, backgroundColor: `${gachaResult.accent}12` }}><RewardIcon type={gachaResult.icon} /></div><p className="mt-7 font-mono text-[10px] tracking-[.18em]" style={{ color: gachaResult.accent }}>{gachaResult.rarity}</p><h2 className="mt-2 font-display text-3xl font-semibold text-white">{gachaResult.name}</h2><p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-[#b8a08a]">{gachaResult.detail}</p><div className="mt-7 rounded-lg border border-white/10 bg-black/15 px-4 py-3 text-left text-[11px] leading-relaxed text-[#928273]"><span className="font-semibold text-[#d9b37a]">MARKET-SAFE:</span> この報酬は見た目・記録用途のみ。市場の価格計算・ニュース選択・取引結果には影響しません。</div><Button onClick={() => setGachaOpen(false)} className="mt-6 h-11 w-full bg-white text-[#172116] hover:bg-[#e6efe6]">ARCHIVE に保存</Button></div>}</div></div>}
       {levelUp && <div className="level-up-toast fixed left-1/2 top-5 z-[90] -translate-x-1/2 rounded-xl border border-[#8fc5ff]/45 bg-[#081d38]/95 px-5 py-3 text-center shadow-[0_18px_48px_rgba(0,0,0,.4)] backdrop-blur-xl"><p className="font-mono text-[9px] tracking-[.18em] text-[#8fc5ff]">LEVEL UP</p><p className="mt-1 font-display text-xl font-semibold text-white">PULSE LEVEL {levelUp}</p></div>}
-      {isOpening && openingPack && <ArchiveOpeningOverlay pack={openingPack} />}
+      {isOpening && openingPack && <ArchiveOpeningOverlay pack={openingPack} result={gachaResult} />}
       {profileOpen && <ProfileModal asset={selected} profile={selectedProfile} onClose={() => setProfileOpen(false)} />}
     </main>
   );
@@ -807,8 +837,25 @@ function QuestDeck({ level, xp, levelProgress, nextLevelXp, quests, completeCoun
   return <section className="mb-5 overflow-hidden rounded-2xl border border-[#4f9bff]/35 bg-[#071a32]/90 shadow-[0_20px_45px_rgba(0,0,0,.2)] backdrop-blur-sm"><div className="grid gap-0 lg:grid-cols-[.83fr_1.7fr]"><div className="relative overflow-hidden border-b border-white/[.09] p-5 lg:border-b-0 lg:border-r sm:p-6"><div className="absolute -right-9 -top-10 h-32 w-32 rounded-full bg-[#4f9bff]/20 blur-2xl" /><div className="relative"><p className="eyebrow text-[#8fc5ff]">EXCHANGE FLOOR / PLAYER</p><div className="mt-3 flex items-end gap-3"><span className="font-mono text-5xl font-semibold tracking-[-.1em] text-white">{String(level).padStart(2, "0")}</span><div className="pb-1"><p className="font-display text-base font-semibold text-white">PULSE LEVEL</p><p className="font-mono text-[10px] text-[#8ca9c6]">{xp} XP / NEXT {nextLevelXp}</p></div></div><div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-[#4f9bff] transition-[width] duration-500" style={{ width: `${Math.min(100, levelProgress)}%` }} /></div><p className="mt-3 text-xs leading-relaxed text-[#a8bfd6]">ニュースの理由を読み、売買を記録し、コレクションを揃える。市場はあなたの取引では動きません。</p></div></div><div className="p-5 sm:p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow text-[#8fc5ff]">TODAY'S MISSIONS</p><p className="mt-1 font-display text-lg font-semibold text-white">次の小さな一手</p></div><span className="rounded-lg border border-[#4f9bff]/30 bg-[#4f9bff]/[.1] px-3 py-2 font-mono text-[10px] text-[#9ecbff]">{completeCount}/3 COMPLETE</span></div><div className="mt-4 grid gap-2 md:grid-cols-3">{QUESTS.map((quest) => { const progress = quests[quest.key]; const done = progress >= quest.goal; return <button type="button" key={quest.key} onClick={() => onGo(quest.key)} className={`rounded-xl border p-3 text-left transition hover:-translate-y-0.5 ${done ? "border-[#5ee8b0]/35 bg-[#5ee8b0]/[.08]" : "border-white/[.1] bg-black/15 hover:border-[#4f9bff]/45 hover:bg-[#4f9bff]/[.08]"}`}><div className="flex items-start justify-between gap-2"><span className={`font-mono text-[9px] tracking-[.12em] ${done ? "text-[#5ee8b0]" : "text-[#8fc5ff]"}`}>{done ? "DONE" : quest.label}</span><span className="font-mono text-[9px] text-[#8ca0ae]">+{quest.xp} XP</span></div><p className="mt-3 font-display text-sm font-semibold text-white">{quest.detail}</p><div className="mt-3 flex items-center justify-between font-mono text-[10px]"><span className="text-[#a9bbc7]">{Math.min(progress, quest.goal)}/{quest.goal}</span><span className={done ? "text-[#5ee8b0]" : "text-[#8fc5ff]"}>{done ? "READY" : "GO"}</span></div></button>; })}</div><div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/[.08] pt-4"><span className="font-mono text-[9px] tracking-[.12em] text-[#8fc5ff]">STARTER COMPASS</span>{tutorial.map((label, index) => <span key={label} className={`rounded-md border px-2.5 py-1 font-mono text-[9px] ${tutorialStep > index ? "border-[#5ee8b0]/35 bg-[#5ee8b0]/[.08] text-[#5ee8b0]" : "border-white/[.1] bg-white/[.03] text-[#8fa3ac]"}`}>{tutorialStep > index ? "DONE" : `${index + 1}.`} {label}</span>)}</div></div></div></section>;
 }
 
+function MarketImpactRibbon({ asset, newsImpact, botImpact, orders }: { asset: Asset; newsImpact: number; botImpact: number; orders: BotTrader[] }) {
+  const flow = (value: number) => `${value >= 0 ? "+" : ""}${(value * 100).toFixed(2)}%`;
+  const botNames = orders.length ? orders.map((bot) => `${bot.name} ${bot.action.side}`).join(" · ") : "BOT ORDER待機";
+  return <section className="mb-4 overflow-hidden border-y border-[#4f9bff]/25 bg-[#061214]/85"><div className="grid gap-px bg-white/[.07] sm:grid-cols-[1.1fr_.9fr_.9fr]"><div className="bg-[#061214] px-4 py-3"><p className="eyebrow text-[#8fc5ff]">MARKET IMPACT / {asset.code}</p><p className="mt-1 font-display text-sm font-semibold text-white">ニュースと注文の合流点</p></div><div className="bg-[#061214] px-4 py-3"><p className="font-mono text-[9px] tracking-[.1em] text-[#8fa4a5]">NEWS SIGNAL</p><p className={`mt-1 font-mono text-sm ${newsImpact >= 0 ? "text-[#c9f34a]" : "text-[#ff9e9e]"}`}>{flow(newsImpact)}</p></div><div className="bg-[#061214] px-4 py-3"><p className="font-mono text-[9px] tracking-[.1em] text-[#8fa4a5]">BOT ORDER FLOW</p><p className={`mt-1 font-mono text-sm ${botImpact >= 0 ? "text-[#c9f34a]" : "text-[#ff9e9e]"}`}>{flow(botImpact)} <span className="ml-2 text-[9px] text-[#95a8a7]">{botNames}</span></p></div></div></section>;
+}
+
 function BotTraderDesk({ bots, assets, trust, onSync }: { bots: BotTrader[]; assets: Asset[]; trust: Record<string, number>; onSync: (bot: BotTrader) => void }) {
-  return <section className="mb-5 overflow-hidden rounded-2xl border border-[#c9f34a]/25 bg-[#0a1719]/92 shadow-[0_18px_42px_rgba(0,0,0,.18)]"><div className="flex flex-col justify-between gap-3 border-b border-white/[.08] px-5 py-4 sm:flex-row sm:items-center sm:px-6"><div><p className="eyebrow text-[#c9f34a]">VIRTUAL BOT DESK / PRICE NEUTRAL</p><h2 className="mt-1 font-display text-lg font-semibold text-white">BOTトレーダーの観察ログ</h2><p className="mt-1 text-xs text-[#91a3a3]">ニュースを読み、観察アクションを出す仮想トレーダーです。BOTの行動は市場価格・ニュース・排出率を変えません。</p></div><span className="rounded-lg border border-[#c9f34a]/30 bg-[#c9f34a]/[.08] px-3 py-2 font-mono text-[10px] text-[#c9f34a]">4 ACTIVE BOTS</span></div><div className="grid gap-px bg-white/[.07] md:grid-cols-2 xl:grid-cols-4">{bots.map((bot) => { const asset = assets.find((entry) => entry.id === bot.action.assetId); const synced = trust[bot.id] ?? 0; return <article key={bot.id} className="bg-[#0a1719] p-4"><div className="flex items-start justify-between gap-3"><div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-full border font-mono text-xs font-semibold" style={{ color: bot.accent, borderColor: `${bot.accent}66`, backgroundColor: `${bot.accent}12` }}>{bot.name.slice(0, 1)}</span><div><p className="font-display text-sm font-semibold text-white">{bot.name}</p><p className="font-mono text-[8px] tracking-[.1em]" style={{ color: bot.accent }}>{bot.role}</p></div></div><span className={`rounded border px-1.5 py-1 font-mono text-[8px] ${bot.action.side === "ADD" ? "border-[#c9f34a]/35 bg-[#c9f34a]/[.1] text-[#c9f34a]" : bot.action.side === "TRIM" ? "border-[#ff917f]/35 bg-[#ff917f]/[.08] text-[#ff9e9e]" : "border-white/[.12] text-[#aab6b8]"}`}>{bot.action.side}</span></div><p className="mt-4 font-mono text-[10px] text-[#c7d5d5]">{asset?.code ?? "WATCH"} · CONF {bot.action.confidence}</p><p className="mt-2 min-h-[34px] text-[10px] leading-relaxed text-[#84989a]">{bot.action.reason}</p><div className="mt-4 flex items-center justify-between border-t border-white/[.08] pt-3"><span className="font-mono text-[9px] text-[#71878a]">SYNC {synced}/3</span><button type="button" onClick={() => onSync(bot)} disabled={synced >= 3} className="rounded-md border border-white/[.14] px-2.5 py-1.5 font-mono text-[9px] text-white transition hover:border-[#c9f34a]/50 hover:bg-[#c9f34a]/[.1] hover:text-[#c9f34a] disabled:cursor-not-allowed disabled:opacity-35">{synced >= 3 ? "LOGGED" : "SYNC NOTE"}</button></div></article>; })}</div></section>;
+  return <section className="mb-5 overflow-hidden rounded-2xl border border-[#c9f34a]/25 bg-[#0a1719]/92 shadow-[0_18px_42px_rgba(0,0,0,.18)]">
+    <div className="flex flex-col justify-between gap-3 border-b border-white/[.08] px-5 py-4 sm:flex-row sm:items-center sm:px-6">
+      <div><p className="eyebrow text-[#c9f34a]">VIRTUAL BOT DESK / MARKET PARTICIPANTS</p><h2 className="mt-1 font-display text-lg font-semibold text-white">BOTトレーダーの注文フロー</h2><p className="mt-1 text-xs text-[#91a3a3]">BOTはニュースを解釈して架空市場へADD／TRIM注文を出し、その圧力が価格更新に反映されます。ニュース内容とガチャ排出率は変えません。</p></div>
+      <span className="rounded-lg border border-[#c9f34a]/30 bg-[#c9f34a]/[.08] px-3 py-2 font-mono text-[10px] text-[#c9f34a]">4 ACTIVE BOTS</span>
+    </div>
+    <div className="grid gap-px bg-white/[.07] md:grid-cols-2 xl:grid-cols-4">{bots.map((bot) => {
+      const asset = assets.find((entry) => entry.id === bot.action.assetId);
+      const synced = trust[bot.id] ?? 0;
+      const impactLabel = `${bot.action.impact >= 0 ? "+" : ""}${(bot.action.impact * 100).toFixed(2)}%`;
+      return <article key={bot.id} className="bg-[#0a1719] p-4"><div className="flex items-start justify-between gap-3"><div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-full border font-mono text-xs font-semibold" style={{ color: bot.accent, borderColor: `${bot.accent}66`, backgroundColor: `${bot.accent}12` }}>{bot.name.slice(0, 1)}</span><div><p className="font-display text-sm font-semibold text-white">{bot.name}</p><p className="font-mono text-[8px] tracking-[.1em]" style={{ color: bot.accent }}>{bot.role}</p></div></div><span className={`rounded border px-1.5 py-1 font-mono text-[8px] ${bot.action.side === "ADD" ? "border-[#c9f34a]/35 bg-[#c9f34a]/[.1] text-[#c9f34a]" : bot.action.side === "TRIM" ? "border-[#ff917f]/35 bg-[#ff917f]/[.08] text-[#ff9e9e]" : "border-white/[.12] text-[#aab6b8]"}`}>{bot.action.side}</span></div><p className="mt-4 font-mono text-[10px] text-[#c7d5d5]">{asset?.code ?? "WATCH"} · CONF {bot.action.confidence} · <span className={bot.action.impact >= 0 ? "text-[#c9f34a]" : "text-[#ff9e9e]"}>{impactLabel}</span></p><p className="mt-2 min-h-[34px] text-[10px] leading-relaxed text-[#84989a]">{bot.action.reason}</p><div className="mt-4 flex items-center justify-between border-t border-white/[.08] pt-3"><span className="font-mono text-[9px] text-[#71878a]">SYNC {synced}/3</span><button type="button" onClick={() => onSync(bot)} disabled={synced >= 3} className="rounded-md border border-white/[.14] px-2.5 py-1.5 font-mono text-[9px] text-white transition hover:border-[#c9f34a]/50 hover:bg-[#c9f34a]/[.1] hover:text-[#c9f34a] disabled:cursor-not-allowed disabled:opacity-35">{synced >= 3 ? "LOGGED" : "SYNC NOTE"}</button></div></article>;
+    })}</div>
+  </section>;
 }
 
 function NewsFlow({ events }: { events: MarketEvent[] }) {
@@ -843,13 +890,24 @@ function SaveStatusPanel({ savedAt, onSave, onReset }: { savedAt: number | null;
   return <section className="mt-4 flex flex-col gap-3 border-y border-[#4f9bff]/18 bg-[#4f9bff]/[.045] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><span className="grid h-8 w-8 place-items-center rounded-lg border border-[#4f9bff]/30 bg-[#4f9bff]/[.1] text-[#8fc5ff]"><Save size={15} /></span><div><p className="font-mono text-[10px] tracking-[.12em] text-[#8fc5ff]">LOCAL SAVE / AUTO ON</p><p className="mt-0.5 text-[11px] text-[#a9b9b9]">最終保存: {label} · このブラウザの端末内に保存されます。</p></div></div><div className="flex gap-2"><button type="button" onClick={onSave} className="rounded-md border border-[#4f9bff]/35 bg-[#4f9bff]/[.1] px-3 py-2 font-mono text-[9px] text-[#9bcaff] transition hover:bg-[#4f9bff]/[.2]">SAVE NOW</button><button type="button" onClick={onReset} className="flex items-center gap-1 rounded-md px-2 py-2 font-mono text-[9px] text-[#84969a] transition hover:bg-white/[.06] hover:text-[#ff9e9e]"><RotateCcw size={12} /> RESET</button></div></section>;
 }
 
-function ArchiveOpeningOverlay({ pack }: { pack: GachaPack }) {
-  return <div className="fixed inset-0 z-[80] grid place-items-center bg-[#020709]/86 p-5 backdrop-blur-md"><div className="archive-opening relative w-full max-w-md overflow-hidden rounded-2xl border p-7 text-center shadow-2xl" style={{ borderColor: `${pack.accent}88`, backgroundColor: "#0b1519" }}><div className="archive-opening-scan absolute inset-x-0 top-0 h-px" style={{ backgroundColor: pack.accent }} /><div className="absolute inset-0 opacity-25" style={{ backgroundImage: `radial-gradient(circle at 50% 0%, ${pack.accent}55 0%, transparent 56%)` }} /><div className="relative"><p className="font-mono text-[10px] tracking-[.2em]" style={{ color: pack.accent }}>SEAL BREAKING / {pack.kicker}</p><div className="archive-opening-core mx-auto mt-7 grid h-24 w-24 place-items-center rounded-2xl border" style={{ color: pack.accent, borderColor: `${pack.accent}66`, backgroundColor: `${pack.accent}16` }}><RewardIcon type={pack.icon} /></div><p className="mt-6 font-display text-2xl font-semibold text-white">ARCHIVE UNSEALING</p><div className="mx-auto mt-6 flex max-w-[260px] items-center justify-between gap-2">{["SEAL", "SCAN", "REVEAL"].map((step, index) => <div key={step} className="flex items-center gap-2"><span className="grid h-6 w-6 place-items-center rounded-full border font-mono text-[9px]" style={{ color: pack.accent, borderColor: `${pack.accent}88`, backgroundColor: `${pack.accent}12` }}>{index + 1}</span><span className="font-mono text-[8px] tracking-[.08em] text-[#a9babd]">{step}</span>{index < 2 && <span className="h-px w-3 bg-white/15" />}</div>)}</div><p className="mt-6 font-mono text-[10px] text-[#93a6aa]">解析中… レアリティを確認しています。</p></div></div></div>;
+function ArchiveOpeningOverlay({ pack, result }: { pack: GachaPack; result: Reward | null }) {
+  const rarity = result?.rarity ?? "COMMON";
+  const accent = result?.accent ?? pack.accent;
+  const elevated = rarity === "MYTHIC" || rarity === "LIMITED";
+  const steps = rarity === "LIMITED" ? ["SEAL", "SCAN", "SIGNATURE", "REVEAL"] : ["SEAL", "SCAN", "REVEAL"];
+  return <div className={`archive-overlay fixed inset-0 z-[80] grid place-items-center bg-[#020709]/86 p-5 backdrop-blur-md rarity-${rarity.toLowerCase()}`}>
+    <div className="archive-opening relative w-full max-w-md overflow-hidden rounded-2xl border p-7 text-center shadow-2xl" style={{ borderColor: `${accent}88`, backgroundColor: "#0b1519" }}>
+      {elevated && <div className="archive-sigil absolute inset-0" style={{ borderColor: `${accent}88` }} />}
+      <div className="archive-opening-scan absolute inset-x-0 top-0 h-px" style={{ backgroundColor: accent }} />
+      <div className="absolute inset-0 opacity-30" style={{ backgroundImage: `radial-gradient(circle at 50% 0%, ${accent}66 0%, transparent 58%)` }} />
+      <div className="relative"><p className="font-mono text-[10px] tracking-[.2em]" style={{ color: accent }}>{rarity === "LIMITED" ? "LIMITED SIGNATURE DETECTED" : `SEAL BREAKING / ${pack.kicker}`}</p><div className="archive-opening-core mx-auto mt-7 grid h-24 w-24 place-items-center rounded-2xl border" style={{ color: accent, borderColor: `${accent}66`, backgroundColor: `${accent}16` }}><RewardIcon type={result?.icon ?? pack.icon} /></div><p className="mt-6 font-display text-2xl font-semibold text-white">{rarity === "LIMITED" ? "SIGNATURE UNLOCK" : "ARCHIVE UNSEALING"}</p><p className="mt-1 font-mono text-[10px] tracking-[.2em]" style={{ color: accent }}>{rarity}</p><div className="mx-auto mt-6 flex max-w-[300px] items-center justify-between gap-2">{steps.map((step, index) => <div key={step} className="flex items-center gap-2"><span className="grid h-6 w-6 place-items-center rounded-full border font-mono text-[9px]" style={{ color: accent, borderColor: `${accent}88`, backgroundColor: `${accent}12` }}>{index + 1}</span><span className="font-mono text-[8px] tracking-[.08em] text-[#a9babd]">{step}</span>{index < steps.length - 1 && <span className="h-px w-3 bg-white/15" />}</div>)}</div><p className="mt-6 font-mono text-[10px] text-[#93a6aa]">{rarity === "LIMITED" ? "季節限定シグネチャを照合中…" : elevated ? "高レア・フローを同期中…" : "解析中… レアリティを確認しています。"}</p></div>
+    </div>
+  </div>;
 }
 
 function ArchiveModuleRack({ archive, activeArchive, activeEffect, onActivate, onDeactivate, candles, catalysts }: { archive: Reward[]; activeArchive: Reward | null; activeEffect: ArchiveEffect | null; onActivate: (reward: Reward) => void; onDeactivate: () => void; candles: Candle[]; catalysts: MarketEvent[] }) {
   const range = candles.length ? ((Math.max(...candles.map((candle) => candle.high)) - Math.min(...candles.map((candle) => candle.low))) / Math.max(0.01, candles.at(-1)?.close ?? 1)) * 100 : 0;
-  const insight = activeEffect?.key === "credit" ? "次の売買では、通常のCreditに +5 が追加されます。" : activeEffect?.key === "news" ? `注目ニュース: ${catalysts[0]?.title ?? "選択中銘柄へのニュースを待機中"}` : activeEffect?.key === "range" ? `直近レンジ: ${range.toFixed(2)}% — 数字が大きいほど、いまの動きが大きめです。` : activeEffect?.key === "brief" ? `いまの要因: ${catalysts[0]?.copy ?? "選択中銘柄への材料を待機中"}` : activeEffect?.key === "bot" ? "BOT LINK: 仮想BOTの観察ログを自分の判断と比較できます。BOTは価格・ニュース・約定を変えません。" : "アーカイブを入手すると、ここで市場を変えない分析モジュールとして使えます。";
+  const insight = activeEffect?.key === "credit" ? "次の売買では、通常のCreditに +5 が追加されます。" : activeEffect?.key === "news" ? `注目ニュース: ${catalysts[0]?.title ?? "選択中銘柄へのニュースを待機中"}` : activeEffect?.key === "range" ? `直近レンジ: ${range.toFixed(2)}% — 数字が大きいほど、いまの動きが大きめです。` : activeEffect?.key === "brief" ? `いまの要因: ${catalysts[0]?.copy ?? "選択中銘柄への材料を待機中"}` : activeEffect?.key === "bot" ? "BOT LINK: BOT注文は市場へ影響します。このモジュールでは、その注文フローと自分の判断を比較できます。アーカイブ自体は市場を変えません。" : "アーカイブを入手すると、ここで市場を変えない分析モジュールとして使えます。";
   return <section className="mt-5 overflow-hidden rounded-2xl border border-[#4f9bff]/25 bg-[#0b1519]"><div className="flex flex-col gap-4 border-b border-white/[.08] px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="eyebrow text-[#74b5ff]">ARCHIVE MODULE / 効果を選ぶ</p><p className="mt-1 font-display text-lg font-semibold text-white">入手記録を、分析に使う。</p><p className="mt-1 text-[11px] leading-relaxed text-[#84979a]">どの効果も価格・ニュース・約定には影響しません。</p></div>{activeArchive ? <button type="button" onClick={onDeactivate} className="rounded-lg border border-[#4f9bff]/30 bg-[#4f9bff]/[.09] px-3 py-2 font-mono text-[10px] text-[#9bcaff] transition hover:bg-[#4f9bff]/[.16]">EJECT MODULE</button> : <span className="rounded-lg border border-white/[.1] bg-white/[.04] px-3 py-2 font-mono text-[10px] text-[#8ca0a3]">NO MODULE</span>}</div>{activeArchive && activeEffect ? <div className="grid gap-3 border-b border-white/[.07] bg-[#4f9bff]/[.06] p-4 sm:grid-cols-[auto_1fr]"><span className="grid h-10 w-10 place-items-center rounded-lg" style={{ color: RARITY_META[activeArchive.rarity].color, backgroundColor: RARITY_META[activeArchive.rarity].background }}><RewardIcon type={activeArchive.icon} /></span><div><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-[10px] tracking-[.12em] text-[#8fc5ff]">ACTIVE / {activeEffect.label}</span><span className="rounded border px-1.5 py-0.5 font-mono text-[8px]" style={{ color: RARITY_META[activeArchive.rarity].color, borderColor: RARITY_META[activeArchive.rarity].border }}>{activeArchive.rarity}</span></div><p className="mt-1 text-sm font-medium text-white">{activeArchive.name}</p><p className="mt-1 text-[11px] leading-relaxed text-[#b7c8ca]">{insight}</p></div></div> : null}<div className="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-4">{archive.length === 0 ? <p className="sm:col-span-2 lg:col-span-4 text-sm text-[#8ca0a3]">まだ使えるアーカイブはありません。ガチャで入手すると、有効化ボタンがここに表示されます。</p> : archive.slice(0, 4).map((reward, index) => { const effect = ARCHIVE_EFFECTS[reward.rarity]; const active = activeArchive?.id === reward.id; return <div key={`${reward.id}-${index}`} className={`rounded-xl border p-3 ${active ? "border-[#4f9bff]/50 bg-[#4f9bff]/[.1]" : "border-white/[.09] bg-white/[.025]"}`}><div className="flex items-center justify-between gap-2"><span className="font-mono text-[9px]" style={{ color: RARITY_META[reward.rarity].color }}>{reward.rarity}</span><RewardIcon type={reward.icon} /></div><p className="mt-3 font-display text-sm font-semibold text-white">{reward.name}</p><p className="mt-1 min-h-[32px] text-[10px] leading-relaxed text-[#90a4a6]">{effect.label}: {effect.description}</p><button type="button" onClick={() => onActivate(reward)} className={`mt-3 w-full rounded-md px-2 py-2 font-mono text-[9px] tracking-[.08em] transition ${active ? "bg-[#4f9bff] text-white" : "border border-[#4f9bff]/30 text-[#8fc5ff] hover:bg-[#4f9bff]/[.12]"}`}>{active ? "ACTIVE" : "ACTIVATE"}</button></div>; })}</div></section>;
 }
 
@@ -872,7 +930,7 @@ function FloorLeaderboard({ playerName, level, archiveCount, missionCount, roomS
 }
 
 function ArchiveVault({ archive, activeFilter, onFilter, totalCount, shards, onCraft }: { archive: Reward[]; activeFilter: "ALL" | Reward["rarity"]; onFilter: (filter: "ALL" | Reward["rarity"]) => void; totalCount: number; shards: number; onCraft: () => void }) {
-  const filters: Array<"ALL" | Reward["rarity"]> = ["ALL", "COMMON", "RARE", "EPIC", "LEGEND", "MYTHIC"];
+  const filters: Array<"ALL" | Reward["rarity"]> = ["ALL", "COMMON", "RARE", "EPIC", "LEGEND", "MYTHIC", "LIMITED"];
   return <section className="mt-6 overflow-hidden rounded-2xl border border-[#4f9bff]/25 bg-[#0b1519] shadow-[0_18px_36px_rgba(0,0,0,.12)]"><div className="flex flex-col justify-between gap-4 border-b border-white/[.08] px-5 py-5 sm:flex-row sm:items-center sm:px-6"><div><p className="eyebrow text-[#74b5ff]">MY ARCHIVE / 入手アイテム管理</p><h2 className="mt-1 font-display text-xl font-semibold text-white">獲得アーカイブ</h2><p className="mt-1 text-xs text-[#8ea0a4]">ガチャで入手した記録を、レアリティごとに確認できます。</p></div><div className="rounded-lg border border-[#4f9bff]/20 bg-[#4f9bff]/[.08] px-3 py-2 font-mono text-xs text-[#8fc5ff]">TOTAL {totalCount} ITEM</div></div><div className="flex flex-wrap gap-2 border-b border-white/[.07] px-5 py-3 sm:px-6">{filters.map((filter) => { const meta = filter === "ALL" ? { label: "ALL", color: "#8fc5ff", border: "#4f9bff55", background: "#4f9bff12" } : RARITY_META[filter]; return <button key={filter} type="button" onClick={() => onFilter(filter)} className={`rounded-md border px-2.5 py-1.5 font-mono text-[10px] transition ${activeFilter === filter ? "shadow-[inset_0_0_0_1px_currentColor]" : "opacity-65 hover:opacity-100"}`} style={{ color: meta.color, borderColor: meta.border, backgroundColor: activeFilter === filter ? meta.background : "transparent" }}>{meta.label}{filter !== "ALL" && <span className="ml-1 opacity-75">{RARITY_META[filter].rate}</span>}</button>; })}</div>{archive.length === 0 ? <div className="grid min-h-36 place-items-center px-6 py-10 text-center"><div><Archive size={22} className="mx-auto text-[#4f9bff]" /><p className="mt-3 font-display text-base font-medium text-white">アーカイブはまだ空です。</p><p className="mt-1 text-xs text-[#84969a]">パックを開封すると、ここでレアリティ別に管理できます。</p></div></div> : <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-4 sm:p-6">{archive.map((reward, index) => { const meta = RARITY_META[reward.rarity]; return <article key={`${reward.id}-${index}`} className="group relative overflow-hidden rounded-xl border bg-white/[.025] p-4 transition hover:-translate-y-0.5" style={{ borderColor: meta.border }}><div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: meta.color }} /><div className="flex items-start justify-between gap-3"><span className="grid h-9 w-9 place-items-center rounded-lg" style={{ backgroundColor: meta.background, color: meta.color }}><RewardIcon type={reward.icon} /></span><span className="rounded-md border px-2 py-1 font-mono text-[9px] tracking-[.08em]" style={{ color: meta.color, borderColor: meta.border, backgroundColor: meta.background }}>{meta.label}</span></div><h3 className="mt-4 font-display text-base font-semibold text-white">{reward.name}</h3><p className="mt-1 text-[11px] leading-relaxed text-[#94a5a8]">{reward.detail}</p><p className="mt-4 font-mono text-[9px] text-[#6f8388]">ARCHIVE #{String(totalCount - index).padStart(3, "0")}</p></article>; })}</div>}</section>;
 }
 
@@ -883,6 +941,10 @@ function ArchiveForge({ shards, onCraft }: { shards: number; onCraft: () => void
 
 function PackProtectionPanel({ streaks }: { streaks: Partial<Record<GachaPack["id"], number>> }) {
   return <section className="mt-4 overflow-hidden rounded-2xl border border-[#f6c96a]/25 bg-[#17140e]"><div className="flex flex-col justify-between gap-2 border-b border-[#f6c96a]/15 px-5 py-4 sm:flex-row sm:items-center sm:px-6"><div><p className="eyebrow text-[#f6c96a]">PACK PROTECTION / HIGH RARITY</p><h2 className="mt-1 font-display text-lg font-semibold text-white">開封カウンター</h2></div><p className="max-w-md text-xs leading-relaxed text-[#bca98a]">同じパックでLEGEND／MYTHICを引かずに9回開封すると、10回目はLEGEND以上を確定します。</p></div><div className="grid gap-px bg-[#f6c96a]/10 sm:grid-cols-2 lg:grid-cols-5">{GACHA_PACKS.map((pack) => { const count = streaks[pack.id] ?? 0; return <div key={pack.id} className="bg-[#17140e] p-4"><div className="flex items-center justify-between"><span className="font-mono text-[9px] tracking-[.1em]" style={{ color: pack.accent }}>{pack.kicker}</span><span className="font-mono text-[10px] text-[#f6c96a]">{Math.min(count, 9)}/9</span></div><p className="mt-3 font-display text-sm font-semibold text-white">{pack.label}</p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[.09]"><div className="h-full rounded-full bg-[#f6c96a] transition-[width] duration-500" style={{ width: `${Math.min(100, count / 9 * 100)}%` }} /></div><p className="mt-2 font-mono text-[9px] text-[#95866e]">{count >= 9 ? "NEXT: LEGEND+" : `あと ${9 - count} 回で保護`}</p></div>; })}</div></section>;
+}
+
+function LimitedDropBanner() {
+  return <section className="mt-4 overflow-hidden border border-[#ff6ee7]/35 bg-[linear-gradient(110deg,rgba(255,110,231,.14),rgba(13,20,27,.95)_55%,rgba(201,243,74,.10))] px-5 py-4 sm:flex sm:items-center sm:justify-between sm:px-6"><div><p className="eyebrow text-[#ff9ef0]">LIMITED DROP / SEASON 01</p><h2 className="mt-1 font-display text-lg font-semibold text-white">MYTHICを超える、期間限定アーカイブ。</h2><p className="mt-1 text-xs leading-relaxed text-[#c9b9c7]">全5パックに限定アイテムを1種ずつ収録。通常確率は <span className="font-mono text-[#ff9ef0]">0.02%</span>、重複時は Archive Shard +320 へ変換されます。</p></div><span className="mt-3 inline-flex w-fit items-center border border-[#ff6ee7]/45 bg-[#ff6ee7]/[.1] px-3 py-2 font-mono text-[10px] tracking-[.12em] text-[#ff9ef0] sm:mt-0">LIMITED / SEASON 01</span></section>;
 }
 
 function ProfilePreview({ profile, asset, onOpen }: { profile: AssetProfile; asset: Asset; onOpen: () => void }) {

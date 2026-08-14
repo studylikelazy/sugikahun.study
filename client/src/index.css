@@ -71,7 +71,7 @@
   .market-shell { position: relative; isolation: isolate; }
   .market-shell::before { content: ""; position: fixed; z-index: -1; inset: 0; background-image: linear-gradient(rgba(8,17,21,.82), rgba(8,17,21,.89)), url('/manus-storage/market-pulse-texture_11d38308.png'); background-size: cover; background-position: center; pointer-events: none; }
   .market-sidebar { display: flex; flex-direction: column; }
-  .panel-card { border: 1px solid rgba(255,255,255,.10); border-radius: 1rem; background: rgba(13, 26, 30, .88); box-shadow: 0 18px 36px rgba(0,0,0,.12); }
+  .panel-card { border: 1px solid rgba(255,255,255,.10); border-radius: .35rem; background: rgba(13, 26, 30, .88); box-shadow: 0 18px 36px rgba(0,0,0,.12); }
   .eyebrow { font-family: "IBM Plex Mono", monospace; font-size: 9px; line-height: 1; letter-spacing: .15em; color: #728187; }
   .eyebrow::before { content: ""; display: inline-block; width: 15px; height: 6px; margin-right: 7px; vertical-align: middle; background: linear-gradient(135deg, transparent 0 18%, currentColor 19% 31%, transparent 32% 48%, currentColor 49% 61%, transparent 62%); opacity: .9; }
   .live-dot span { animation: pulse-glow 1.8s infinite; }
@@ -85,6 +85,14 @@
   .market-shell button.bg-\[\#4f9bff\]:not([aria-current]) { background-color: #c9f34a !important; color: #0c180c !important; }
   .market-shell button.bg-\[\#4f9bff\]:not([aria-current]):hover { background-color: #ddff76 !important; }
   .market-shell .border-l-2.border-l-\[\#4f9bff\] { border-left-color: #c9f34a !important; }
+  .market-shell #markets::before { content: "LIVE TAPE  /  CAUSE → PRICE"; position: absolute; z-index: 3; right: 1.1rem; top: .85rem; border-left: 1px solid rgba(201,243,74,.65); padding-left: .55rem; font-family: "IBM Plex Mono", monospace; font-size: 8px; letter-spacing: .14em; color: #c9f34a; opacity: .88; pointer-events: none; }
+  .market-shell #markets::after { content: ""; position: absolute; z-index: 2; inset: 0; pointer-events: none; background: repeating-linear-gradient(90deg, transparent 0 78px, rgba(143,197,255,.055) 79px 80px); mask-image: linear-gradient(to bottom, rgba(0,0,0,.5), transparent 60%); }
+  .market-shell #markets > * { position: relative; z-index: 3; }
+  .market-shell #archive-vault > section { border-radius: .35rem; border-color: rgba(246,201,106,.28); box-shadow: inset 0 1px 0 rgba(246,201,106,.08); }
+  .market-shell #archive-vault > section::before { content: "ARCHIVE VAULT"; display: block; border-bottom: 1px solid rgba(246,201,106,.16); padding: .42rem 1.25rem; font-family: "IBM Plex Mono", monospace; font-size: 8px; letter-spacing: .15em; color: #f6c96a; }
+  .rarity-mythic .archive-opening { box-shadow: 0 0 92px rgba(201,243,74,.22), 0 28px 80px rgba(0,0,0,.52); }
+  .rarity-limited .archive-opening { box-shadow: 0 0 110px rgba(255,110,231,.32), 0 28px 80px rgba(0,0,0,.58); }
+  .archive-sigil { pointer-events: none; border: 1px solid; opacity: .32; clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); transform: scale(1.25); }
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -97,6 +105,14 @@
 @media (prefers-reduced-motion: no-preference) {
   @keyframes archive-core-pulse { 0%, 100% { transform: scale(.96); opacity: .72; box-shadow: 0 0 0 rgba(79,155,255,0); } 55% { transform: scale(1.06); opacity: 1; box-shadow: 0 0 42px rgba(79,155,255,.38); } }
   @keyframes archive-scan { 0% { transform: translateY(0); opacity: .35; } 55% { transform: translateY(286px); opacity: 1; } 100% { transform: translateY(360px); opacity: 0; } }
+  @keyframes mythic-core { 0%, 100% { transform: scale(.92) rotate(-4deg); box-shadow: 0 0 0 rgba(201,243,74,0); } 52% { transform: scale(1.12) rotate(4deg); box-shadow: 0 0 60px rgba(201,243,74,.64); } }
+  @keyframes limited-core { 0%, 100% { transform: scale(.9) rotate(-8deg); filter: hue-rotate(0deg); box-shadow: 0 0 0 rgba(255,110,231,0); } 50% { transform: scale(1.17) rotate(8deg); filter: hue-rotate(28deg); box-shadow: 0 0 76px rgba(255,110,231,.78); } }
+  @keyframes signature-spin { from { transform: scale(1.05) rotate(0deg); opacity: .12; } 50% { opacity: .76; } to { transform: scale(1.45) rotate(180deg); opacity: 0; } }
+  @keyframes limited-flash { 0%, 78%, 100% { background: rgba(2,7,9,.86); } 82% { background: rgba(255,110,231,.28); } 87% { background: rgba(201,243,74,.16); } }
   .archive-opening-core { animation: archive-core-pulse 720ms cubic-bezier(.23,1,.32,1) infinite; }
   .archive-opening-scan { animation: archive-scan 1250ms cubic-bezier(.23,1,.32,1) infinite; }
+  .rarity-mythic .archive-opening-core { animation: mythic-core 940ms cubic-bezier(.23,1,.32,1) infinite; }
+  .rarity-limited .archive-overlay { animation: limited-flash 3400ms linear both; }
+  .rarity-limited .archive-opening-core { animation: limited-core 760ms cubic-bezier(.23,1,.32,1) infinite; }
+  .rarity-limited .archive-sigil { animation: signature-spin 1200ms cubic-bezier(.23,1,.32,1) infinite; }
 }

@@ -73,6 +73,7 @@
   .market-sidebar { display: flex; flex-direction: column; }
   .panel-card { border: 1px solid rgba(255,255,255,.10); border-radius: 1rem; background: rgba(13, 26, 30, .88); box-shadow: 0 18px 36px rgba(0,0,0,.12); }
   .eyebrow { font-family: "IBM Plex Mono", monospace; font-size: 9px; line-height: 1; letter-spacing: .15em; color: #728187; }
+  .eyebrow::before { content: ""; display: inline-block; width: 15px; height: 6px; margin-right: 7px; vertical-align: middle; background: linear-gradient(135deg, transparent 0 18%, currentColor 19% 31%, transparent 32% 48%, currentColor 49% 61%, transparent 62%); opacity: .9; }
   .live-dot span { animation: pulse-glow 1.8s infinite; }
   .gacha-modal { animation: gacha-in .22s cubic-bezier(.23,1,.32,1) both; }
   .exchange-floor { position: fixed; z-index: 0; inset: 0; overflow: hidden; pointer-events: none; opacity: .24; mask-image: linear-gradient(to bottom, #000 0%, rgba(0,0,0,.55) 52%, transparent 88%); }
@@ -81,6 +82,8 @@
   .market-sidebar button[aria-current="page"], #trade-desk .grid.grid-cols-2 > button:first-child { background-color: #c9f34a !important; color: #0c180c !important; }
   .market-sidebar button[aria-current="page"] span, #trade-desk .grid.grid-cols-2 > button:first-child svg { color: #0c180c !important; }
   .market-shell .primary-action { background-color: #c9f34a !important; color: #0c180c !important; }
+  .market-shell button.bg-\[\#4f9bff\]:not([aria-current]) { background-color: #c9f34a !important; color: #0c180c !important; }
+  .market-shell button.bg-\[\#4f9bff\]:not([aria-current]):hover { background-color: #ddff76 !important; }
   .market-shell .border-l-2.border-l-\[\#4f9bff\] { border-left-color: #c9f34a !important; }
 }
 

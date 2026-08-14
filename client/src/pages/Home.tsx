@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { GameCanvas } from "@/components/GameCanvas";
 
 type AssetKind = "Stock" | "Crypto";
 type Asset = {
@@ -86,9 +87,11 @@ type ArchiveEffect = {
 type SeriesProgress = { pack: GachaPack; title: string; subtitle: string; owned: number; total: number; complete: boolean };
 type RoomStatus = "offline" | "connecting" | "connected" | "setup";
 type RoomActivity = { id: string; player: string; action: string; createdAt: number };
-type RoomParticipant = { id: string; name: string; status: "online" | "away" };
+type RoomParticipant = { id: string; name: string; status: "online" | "away"; level?: number; archiveCount?: number; missionCount?: number };
+type QuestKey = "news" | "trade" | "archive";
+type QuestProgress = Record<QuestKey, number>;
 type SavedGame = {
-  version: 1;
+  version: 1 | 2;
   savedAt: number;
   assets: Asset[];
   cash: number;
@@ -99,6 +102,9 @@ type SavedGame = {
   selectedId: string;
   tab: "all" | AssetKind;
   timeframe: Timeframe;
+  xp?: number;
+  questProgress?: QuestProgress;
+  tutorialStep?: number;
 };
 
 type AssetProfile = {
@@ -127,6 +133,11 @@ const GACHA_IMAGE = "/manus-storage/market-pulse-gacha_73e0409e.png";
 const TEXTURE_IMAGE = "/manus-storage/market-pulse-texture_11d38308.png";
 const LOGO_IMAGE = "/manus-storage/market-pulse-logo_3ff09442.png";
 const SAVE_KEY = "market-pulse-save-v1";
+const QUESTS: Array<{ key: QuestKey; label: string; detail: string; goal: number; xp: number }> = [
+  { key: "news", label: "PULSE SCOUT", detail: "ニュースを2件読む", goal: 2, xp: 40 },
+  { key: "trade", label: "FIRST MOVE", detail: "売買を1回する", goal: 1, xp: 60 },
+  { key: "archive", label: "ARCHIVE CHECK", detail: "アーカイブを1回開く", goal: 1, xp: 30 },
+];
 
 function readSavedGame(): SavedGame | null {
   if (typeof window === "undefined") return null;
@@ -134,7 +145,7 @@ function readSavedGame(): SavedGame | null {
     const raw = window.localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<SavedGame>;
-    if (parsed.version !== 1 || !Array.isArray(parsed.assets) || typeof parsed.cash !== "number" || !parsed.holdings || !Array.isArray(parsed.archive)) return null;
+    if ((parsed.version !== 1 && parsed.version !== 2) || !Array.isArray(parsed.assets) || typeof parsed.cash !== "number" || !parsed.holdings || !Array.isArray(parsed.archive)) return null;
     return parsed as SavedGame;
   } catch {
     return null;
@@ -345,7 +356,12 @@ export default function Home() {
   const [roomParticipants, setRoomParticipants] = useState<RoomParticipant[]>([]);
   const [roomActivity, setRoomActivity] = useState<RoomActivity[]>([]);
   const [savedAt, setSavedAt] = useState<number | null>(() => initialSave?.savedAt ?? null);
+  const [xp, setXp] = useState(() => initialSave?.xp ?? 0);
+  const [questProgress, setQuestProgress] = useState<QuestProgress>(() => initialSave?.questProgress ?? { news: 0, trade: 0, archive: 0 });
+  const [tutorialStep, setTutorialStep] = useState(() => initialSave?.tutorialStep ?? 0);
+  const [levelUp, setLevelUp] = useState<number | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const levelRef = useRef(1);
 
   const selected = assets.find((asset) => asset.id === selectedId) ?? assets[0];
   const filteredAssets = tab === "all" ? assets : assets.filter((asset) => asset.kind === tab);
@@ -374,6 +390,11 @@ export default function Home() {
     const info = PACK_SERIES[pack.id];
     return { pack, title: info.title, subtitle: info.subtitle, owned, total: pack.rewards.length, complete: owned === pack.rewards.length };
   }), [archive]);
+  const level = Math.floor(Math.sqrt(xp / 100)) + 1;
+  const currentLevelFloor = (level - 1) ** 2 * 100;
+  const nextLevelXp = level ** 2 * 100;
+  const levelProgress = ((xp - currentLevelFloor) / Math.max(1, nextLevelXp - currentLevelFloor)) * 100;
+  const completeQuestCount = QUESTS.filter((quest) => questProgress[quest.key] >= quest.goal).length;
 
   useEffect(() => {
     if (!profileOpen) return;
@@ -388,7 +409,17 @@ export default function Home() {
     setChartCandles(createCandles(selected, timeframe));
   }, [selectedId, timeframe]);
 
-  const createSaveSnapshot = (): SavedGame => ({ version: 1, savedAt: Date.now(), assets, cash, holdings, credits, archive, activeArchiveId, selectedId, tab, timeframe });
+  useEffect(() => {
+    if (level > levelRef.current) {
+      setLevelUp(level);
+      const timer = window.setTimeout(() => setLevelUp(null), 2400);
+      levelRef.current = level;
+      return () => window.clearTimeout(timer);
+    }
+    levelRef.current = level;
+  }, [level]);
+
+  const createSaveSnapshot = (): SavedGame => ({ version: 2, savedAt: Date.now(), assets, cash, holdings, credits, archive, activeArchiveId, selectedId, tab, timeframe, xp, questProgress, tutorialStep });
 
   const saveNow = (showToast = false) => {
     try {
@@ -410,7 +441,7 @@ export default function Home() {
   useEffect(() => {
     const timer = window.setTimeout(() => saveNow(false), 450);
     return () => window.clearTimeout(timer);
-  }, [assets, cash, holdings, credits, archive, activeArchiveId, selectedId, tab, timeframe]);
+  }, [assets, cash, holdings, credits, archive, activeArchiveId, selectedId, tab, timeframe, xp, questProgress, tutorialStep]);
 
   useEffect(() => () => socketRef.current?.close(), []);
 
@@ -463,6 +494,17 @@ export default function Home() {
     });
   }, [tick, selected.price, selected.kind, timeframe]);
 
+  const recordQuest = (key: QuestKey) => {
+    const quest = QUESTS.find((entry) => entry.key === key)!;
+    const current = questProgress[key];
+    if (current >= quest.goal) return;
+    const reachesGoal = current < quest.goal && current + 1 >= quest.goal;
+    setQuestProgress((progress) => ({ ...progress, [key]: Math.min(quest.goal, progress[key] + 1) }));
+    setTutorialStep((step) => Math.max(step, key === "news" ? 1 : key === "trade" ? 2 : 3));
+    setXp((value) => value + 10 + (reachesGoal ? quest.xp : 0));
+    if (reachesGoal) toast.success(`${quest.label} COMPLETE`, { description: `XP +${quest.xp + 10} を獲得しました。` });
+  };
+
   const trade = (side: "buy" | "sell") => {
     const quantity = Math.max(1, Math.floor(tradeQuantity || 1));
     const value = selected.price * quantity;
@@ -480,6 +522,7 @@ export default function Home() {
       setCredits((current) => current + creditGain);
       toast.success(`${selected.code} を ${quantity} 単位購入`, { description: `取引の記録で Archive Credit +${creditGain}` });
       broadcastRoomActivity(`${selected.code} を ${quantity} UNIT 購入`);
+      recordQuest("trade");
     } else {
       if (existing.quantity < quantity) return toast.error("保有数量が不足しています", { description: `${selected.code} の保有: ${existing.quantity} 単位` });
       setCash((current) => current + value);
@@ -488,11 +531,13 @@ export default function Home() {
       setCredits((current) => current + creditGain);
       toast.success(`${selected.code} を ${quantity} 単位売却`, { description: `取引の記録で Archive Credit +${creditGain}` });
       broadcastRoomActivity(`${selected.code} を ${quantity} UNIT 売却`);
+      recordQuest("trade");
     }
   };
 
   const pullArchive = (pack: GachaPack) => {
     if (credits < pack.cost) return toast.error("Archive Credit が足りません", { description: "売買を記録すると Credit を獲得できます。" });
+    recordQuest("archive");
     const roll = Math.random();
     const reward = roll > 0.99 ? pack.rewards[3] : roll > 0.9 ? pack.rewards[2] : roll > 0.6 ? pack.rewards[1] : pack.rewards[0];
     setCredits((current) => current - pack.cost);
@@ -533,7 +578,7 @@ export default function Home() {
       socketRef.current = socket;
       socket.onopen = () => {
         setRoomStatus("connected");
-        socket.send(JSON.stringify({ type: "join", roomCode, player: { id: "local", name: playerName.trim() || "PULSE PLAYER", status: "online" } }));
+        socket.send(JSON.stringify({ type: "join", roomCode, player: { id: "local", name: playerName.trim() || "PULSE PLAYER", status: "online", level, archiveCount: archive.length, missionCount: completeQuestCount } }));
         broadcastRoomActivity("ルームに参加");
       };
       socket.onmessage = (message) => {
@@ -559,11 +604,12 @@ export default function Home() {
   };
 
   return (
-    <main className="market-shell min-h-screen bg-[#081115] text-[#e9efea] lg:grid lg:grid-cols-[278px_minmax(0,1fr)]">
-      <aside className="market-sidebar border-b border-white/10 bg-[#0b1519]/95 px-5 py-5 lg:sticky lg:top-0 lg:z-30 lg:h-screen lg:w-[278px] lg:border-b-0 lg:border-r lg:px-6 lg:py-7">
+    <main className="market-shell relative isolate min-h-screen bg-[#081115] text-[#e9efea] lg:grid lg:grid-cols-[278px_minmax(0,1fr)]">
+      <GameCanvas />
+      <aside className="market-sidebar relative z-10 border-b border-white/10 bg-[#0b1519]/95 px-5 py-5 lg:sticky lg:top-0 lg:z-30 lg:h-screen lg:w-[278px] lg:border-b-0 lg:border-r lg:px-6 lg:py-7">
         <div className="flex items-center justify-between lg:block">
           <div className="flex items-center gap-3">
-            <img className="h-10 w-10 rounded-[10px] bg-[#4f9bff] object-cover p-1 shadow-[0_0_24px_rgba(79,155,255,.22)]" src={LOGO_IMAGE} alt="MARKET PULSE" />
+            <PulseMark className="h-10 w-10 text-[#c9f34a]" />
             <div>
               <p className="font-display text-[15px] font-bold tracking-[0.14em] text-white">MARKET PULSE</p>
               <p className="font-mono text-[9px] tracking-[0.18em] text-[#859398]">SIMULATION DESK</p>
@@ -604,13 +650,14 @@ export default function Home() {
         <div className="mt-auto hidden border-t border-white/10 pt-5 lg:block"><p className="font-mono text-[9px] leading-relaxed text-[#718187]">FICTIONAL MARKET · NO REAL MONEY<br />ニュースも含め全てゲーム内シミュレーションです。</p></div>
       </aside>
 
-      <section className="min-w-0">
+      <section className="relative z-10 min-w-0">
         <header className="sticky top-0 z-20 flex items-center justify-between border-b border-white/10 bg-[#081115]/90 px-5 py-4 backdrop-blur-xl sm:px-8 lg:px-10">
           <div className="flex items-center gap-3"><img src={LOGO_IMAGE} alt="" className="h-9 w-9 rounded-lg bg-[#4f9bff] p-1" /><div><p className="eyebrow">THE OPEN / MARKET PULSE</p><h1 className="mt-1 font-display text-xl font-semibold tracking-tight text-white">知る。選ぶ。動く。</h1></div></div>
           <div className="flex items-center gap-3"><button className="relative rounded-full p-2 text-[#9babaf] transition hover:bg-white/5 hover:text-white" aria-label="通知"><Bell size={18} /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#4f9bff]" /></button><div className="hidden h-8 border-l border-white/10 sm:block" /><div className="hidden text-right sm:block"><p className="font-mono text-[9px] tracking-[.14em] text-[#718187]">SESSION</p><p className="font-mono text-[11px] text-white">JP / SIM-01</p></div></div>
         </header>
 
         <div className="px-5 py-6 sm:px-8 lg:px-10 lg:py-8">
+          <QuestDeck level={level} xp={xp} levelProgress={levelProgress} nextLevelXp={nextLevelXp} quests={questProgress} completeCount={completeQuestCount} tutorialStep={tutorialStep} onGo={(key) => { if (key === "news") navigateTo("newsflow"); else if (key === "trade") document.getElementById("trade-desk")?.scrollIntoView({ behavior: "smooth", block: "center" }); else document.getElementById("archive-vault")?.scrollIntoView({ behavior: "smooth", block: "center" }); }} />
           <section id="markets" className="relative scroll-mt-24 overflow-hidden rounded-2xl border border-[#4f9bff]/25 bg-[#111d21] shadow-[0_30px_60px_rgba(0,0,0,.2)]">
             <img src={HERO_IMAGE} alt="市場データを表現した抽象的な夜の金融ニュースルーム" className="absolute inset-0 h-full w-full object-cover opacity-55" />
             <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(8,17,21,.98)_0%,rgba(8,17,21,.88)_40%,rgba(8,17,21,.33)_100%)]" />
@@ -635,7 +682,7 @@ export default function Home() {
                 <div className="h-[330px] px-2 pb-3 pt-4 min-[760px]:h-[390px] sm:px-4"><BlueCandlestickPanel candles={chartCandles} crypto={selected.kind === "Crypto"} /></div>
               </section>
 
-              <NewsFlow events={events} />
+              <div onClick={() => recordQuest("news")}><NewsFlow events={events} /></div>
             </div>
 
             <div className="space-y-6">
@@ -657,12 +704,14 @@ export default function Home() {
           <div id="archive-vault"><ArchiveVault archive={visibleArchive} activeFilter={archiveFilter} onFilter={setArchiveFilter} totalCount={archive.length} /></div>
           <SeriesCollectionDeck series={seriesProgress} />
           <SharedRoomPanel playerName={playerName} roomCode={roomCode} roomStatus={roomStatus} participants={roomParticipants} activity={roomActivity} onPlayerName={setPlayerName} onRoomCode={setRoomCode} onConnect={connectRoom} onDisconnect={disconnectRoom} />
+          <FloorLeaderboard playerName={playerName} level={level} archiveCount={archive.length} missionCount={completeQuestCount} roomStatus={roomStatus} participants={roomParticipants} />
         </div>
       </section>
 
       <button onClick={() => { setGachaOpen(true); setGachaResult(null); setActivePack(null); }} className="fixed bottom-5 right-5 z-30 flex items-center gap-2 rounded-full border border-[#d19b4b]/35 bg-[#21170d] px-4 py-3 text-xs font-semibold tracking-[.08em] text-[#f6c96a] shadow-xl lg:hidden"><Archive size={15} /> {credits} CR</button>
 
       {gachaOpen && <div role="dialog" aria-modal="true" aria-label="Archive Gacha" className="fixed inset-0 z-50 grid place-items-center bg-[#030708]/75 p-4 backdrop-blur-md"><div className="gacha-modal relative w-full max-w-2xl overflow-hidden rounded-2xl border border-[#d19b4b]/35 bg-[#15120d] p-6 shadow-2xl sm:p-8"><button onClick={() => setGachaOpen(false)} className="absolute right-4 top-4 rounded-full p-2 text-[#a98d70] transition hover:bg-white/10 hover:text-white" aria-label="閉じる"><X size={18} /></button>{!gachaResult ? <div><div className="text-center"><p className="eyebrow text-[#f6c96a]">ARCHIVE PACKS</p><h2 className="mt-3 font-display text-3xl font-semibold text-white">今日は、何を集める？</h2><p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[#b8a08a]">気になるパックを選ぶだけ。全部、プロフィールを彩るコレクションです。</p></div><div className="mt-7 grid gap-3 sm:grid-cols-3">{GACHA_PACKS.map((pack) => <button key={pack.id} onClick={() => setActivePack(pack)} className={`group rounded-xl border p-4 text-left transition hover:-translate-y-0.5 ${activePack?.id === pack.id ? "bg-white/[.08]" : "bg-black/10 hover:bg-white/[.05]"}`} style={{ borderColor: activePack?.id === pack.id ? pack.accent : `${pack.accent}4a` }}><div className="flex items-center justify-between"><span className="grid h-9 w-9 place-items-center rounded-lg" style={{ backgroundColor: `${pack.accent}18`, color: pack.accent }}><RewardIcon type={pack.icon} /></span><span className="font-mono text-[9px]" style={{ color: pack.accent }}>{pack.kicker}</span></div><p className="mt-4 font-display text-base font-semibold text-white">{pack.label}</p><p className="mt-1 min-h-[38px] text-[11px] leading-relaxed text-[#a58d76]">{pack.description}</p><p className="mt-4 font-mono text-xs" style={{ color: pack.accent }}>{pack.cost} CREDIT</p></button>)}</div>{activePack && <div className="mt-5 flex flex-col items-center justify-between gap-3 rounded-xl border border-[#d19b4b]/20 bg-black/15 p-4 sm:flex-row"><p className="text-center text-xs text-[#b8a08a]">選択中: <span className="font-semibold text-white">{activePack.label}</span>。市場には影響しません。</p><Button onClick={() => pullArchive(activePack)} className="h-11 bg-[#f6c96a] px-6 font-display text-[11px] font-semibold tracking-[.08em] text-[#1d1509] hover:bg-[#ffe09a]">{activePack.cost} CREDIT で開封</Button></div>}<p className="mt-4 text-center text-[10px] text-[#8c735c]">過去のアーカイブ: {archive.length} 件</p></div> : <div className="py-6 text-center"><div className="mx-auto grid h-20 w-20 place-items-center rounded-2xl border" style={{ color: gachaResult.accent, borderColor: `${gachaResult.accent}66`, backgroundColor: `${gachaResult.accent}12` }}><RewardIcon type={gachaResult.icon} /></div><p className="mt-7 font-mono text-[10px] tracking-[.18em]" style={{ color: gachaResult.accent }}>{gachaResult.rarity}</p><h2 className="mt-2 font-display text-3xl font-semibold text-white">{gachaResult.name}</h2><p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-[#b8a08a]">{gachaResult.detail}</p><div className="mt-7 rounded-lg border border-white/10 bg-black/15 px-4 py-3 text-left text-[11px] leading-relaxed text-[#928273]"><span className="font-semibold text-[#d9b37a]">MARKET-SAFE:</span> この報酬は見た目・記録用途のみ。市場の価格計算・ニュース選択・取引結果には影響しません。</div><Button onClick={() => setGachaOpen(false)} className="mt-6 h-11 w-full bg-white text-[#172116] hover:bg-[#e6efe6]">ARCHIVE に保存</Button></div>}</div></div>}
+      {levelUp && <div className="level-up-toast fixed left-1/2 top-5 z-[90] -translate-x-1/2 rounded-xl border border-[#8fc5ff]/45 bg-[#081d38]/95 px-5 py-3 text-center shadow-[0_18px_48px_rgba(0,0,0,.4)] backdrop-blur-xl"><p className="font-mono text-[9px] tracking-[.18em] text-[#8fc5ff]">LEVEL UP</p><p className="mt-1 font-display text-xl font-semibold text-white">PULSE LEVEL {levelUp}</p></div>}
       {isOpening && openingPack && <ArchiveOpeningOverlay pack={openingPack} />}
       {profileOpen && <ProfileModal asset={selected} profile={selectedProfile} onClose={() => setProfileOpen(false)} />}
     </main>
@@ -674,6 +723,10 @@ function PulseRow({ label, value, tone }: { label: string; value: string; tone: 
   return <div><div className="mb-1.5 flex items-center justify-between"><span className="font-mono text-[9px] tracking-[.13em] text-[#6c7d82]">{label}</span><span className={`font-mono text-[11px] ${colors[tone]}`}>{value}</span></div><div className="h-px bg-white/[.09]"><div className={`h-full ${tone === "coral" ? "bg-[#ff7474]" : tone === "lime" ? "bg-[#4f9bff]" : "bg-[#8fa09e]"}`} style={{ width: tone === "lime" ? "72%" : tone === "coral" ? "43%" : "56%" }} /></div></div>;
 }
 
+function PulseMark({ className }: { className: string }) {
+  return <svg viewBox="0 0 48 48" className={className} role="img" aria-label="MARKET PULSE"><path d="M4 38V7h11c10 0 10 15 0 15H4l8-8 5 20 7-18 6 14 6-14 8 22" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3.2" /></svg>;
+}
+
 function SideNavButton({ active, icon, label, onClick }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
   return <button type="button" onClick={onClick} aria-current={active ? "page" : undefined} className={`group flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-xs transition ${active ? "bg-[#4f9bff]/[.16] text-white shadow-[inset_0_0_0_1px_rgba(79,155,255,.22)]" : "text-[#839297] hover:bg-[#4f9bff]/[.07] hover:text-white"}`}><span className={active ? "text-[#74b5ff]" : "text-[#7e9299]"}>{icon}</span><span className="font-display text-[11px] font-medium tracking-[.12em]">{label}</span>{active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[#4f9bff]" />}</button>;
 }
@@ -681,6 +734,11 @@ function SideNavButton({ active, icon, label, onClick }: { active: boolean; icon
 function ChangePill({ change, size = "sm" }: { change: number; size?: "sm" | "lg" }) {
   const up = change >= 0;
   return <span className={`inline-flex items-center gap-1 rounded-md font-mono ${size === "lg" ? "px-2.5 py-1 text-sm" : "px-2 py-1 text-[10px]"} ${up ? "bg-[#36d399]/[.13] text-[#5ee8b0]" : "bg-[#ff7474]/[.12] text-[#ff9e9e]"}`}>{up ? <TrendingUp size={size === "lg" ? 15 : 12} /> : <TrendingDown size={size === "lg" ? 15 : 12} />}{up ? "+" : ""}{change.toFixed(2)}%</span>;
+}
+
+function QuestDeck({ level, xp, levelProgress, nextLevelXp, quests, completeCount, tutorialStep, onGo }: { level: number; xp: number; levelProgress: number; nextLevelXp: number; quests: QuestProgress; completeCount: number; tutorialStep: number; onGo: (key: QuestKey) => void }) {
+  const tutorial = ["ニュースで理由を読む", "少額で1回売買する", "アーカイブを確認する"];
+  return <section className="mb-5 overflow-hidden rounded-2xl border border-[#4f9bff]/35 bg-[#071a32]/90 shadow-[0_20px_45px_rgba(0,0,0,.2)] backdrop-blur-sm"><div className="grid gap-0 lg:grid-cols-[.83fr_1.7fr]"><div className="relative overflow-hidden border-b border-white/[.09] p-5 lg:border-b-0 lg:border-r sm:p-6"><div className="absolute -right-9 -top-10 h-32 w-32 rounded-full bg-[#4f9bff]/20 blur-2xl" /><div className="relative"><p className="eyebrow text-[#8fc5ff]">EXCHANGE FLOOR / PLAYER</p><div className="mt-3 flex items-end gap-3"><span className="font-mono text-5xl font-semibold tracking-[-.1em] text-white">{String(level).padStart(2, "0")}</span><div className="pb-1"><p className="font-display text-base font-semibold text-white">PULSE LEVEL</p><p className="font-mono text-[10px] text-[#8ca9c6]">{xp} XP / NEXT {nextLevelXp}</p></div></div><div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-[#4f9bff] transition-[width] duration-500" style={{ width: `${Math.min(100, levelProgress)}%` }} /></div><p className="mt-3 text-xs leading-relaxed text-[#a8bfd6]">ニュースの理由を読み、売買を記録し、コレクションを揃える。市場はあなたの取引では動きません。</p></div></div><div className="p-5 sm:p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow text-[#8fc5ff]">TODAY'S MISSIONS</p><p className="mt-1 font-display text-lg font-semibold text-white">次の小さな一手</p></div><span className="rounded-lg border border-[#4f9bff]/30 bg-[#4f9bff]/[.1] px-3 py-2 font-mono text-[10px] text-[#9ecbff]">{completeCount}/3 COMPLETE</span></div><div className="mt-4 grid gap-2 md:grid-cols-3">{QUESTS.map((quest) => { const progress = quests[quest.key]; const done = progress >= quest.goal; return <button type="button" key={quest.key} onClick={() => onGo(quest.key)} className={`rounded-xl border p-3 text-left transition hover:-translate-y-0.5 ${done ? "border-[#5ee8b0]/35 bg-[#5ee8b0]/[.08]" : "border-white/[.1] bg-black/15 hover:border-[#4f9bff]/45 hover:bg-[#4f9bff]/[.08]"}`}><div className="flex items-start justify-between gap-2"><span className={`font-mono text-[9px] tracking-[.12em] ${done ? "text-[#5ee8b0]" : "text-[#8fc5ff]"}`}>{done ? "DONE" : quest.label}</span><span className="font-mono text-[9px] text-[#8ca0ae]">+{quest.xp} XP</span></div><p className="mt-3 font-display text-sm font-semibold text-white">{quest.detail}</p><div className="mt-3 flex items-center justify-between font-mono text-[10px]"><span className="text-[#a9bbc7]">{Math.min(progress, quest.goal)}/{quest.goal}</span><span className={done ? "text-[#5ee8b0]" : "text-[#8fc5ff]"}>{done ? "READY" : "GO"}</span></div></button>; })}</div><div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/[.08] pt-4"><span className="font-mono text-[9px] tracking-[.12em] text-[#8fc5ff]">STARTER COMPASS</span>{tutorial.map((label, index) => <span key={label} className={`rounded-md border px-2.5 py-1 font-mono text-[9px] ${tutorialStep > index ? "border-[#5ee8b0]/35 bg-[#5ee8b0]/[.08] text-[#5ee8b0]" : "border-white/[.1] bg-white/[.03] text-[#8fa3ac]"}`}>{tutorialStep > index ? "DONE" : `${index + 1}.`} {label}</span>)}</div></div></div></section>;
 }
 
 function NewsFlow({ events }: { events: MarketEvent[] }) {
@@ -734,6 +792,13 @@ function SharedRoomPanel({ playerName, roomCode, roomStatus, participants, activ
   const statusLabel = roomStatus === "connected" ? "ONLINE" : roomStatus === "connecting" ? "CONNECTING" : roomStatus === "setup" ? "ENDPOINT NEEDED" : "OFFLINE";
   const statusColor = connected ? "text-[#5ee8b0] border-[#5ee8b0]/35 bg-[#5ee8b0]/[.08]" : roomStatus === "connecting" ? "text-[#8fc5ff] border-[#4f9bff]/35 bg-[#4f9bff]/[.08]" : "text-[#a3b1b5] border-white/[.12] bg-white/[.04]";
   return <section className="mt-6 overflow-hidden rounded-2xl border border-[#4f9bff]/25 bg-[#0b1519]"><div className="flex flex-col justify-between gap-4 border-b border-white/[.08] px-5 py-5 sm:flex-row sm:items-center sm:px-6"><div><p className="eyebrow text-[#74b5ff]">SHARED ROOM / ONLINE PULSE</p><h2 className="mt-1 font-display text-xl font-semibold text-white">みんなの市場デスク</h2><p className="mt-1 text-xs text-[#8ea0a4]">参加、開封、売買の要約だけを共有します。価格や排出率は共有されません。</p></div><span className={`rounded-lg border px-3 py-2 font-mono text-[10px] ${statusColor}`}>{statusLabel}</span></div><div className="grid gap-0 lg:grid-cols-[.78fr_1.22fr]"><div className="border-b border-white/[.08] p-5 lg:border-b-0 lg:border-r"><div className="grid gap-3"><label><span className="eyebrow">PLAYER NAME</span><input value={playerName} onChange={(event) => onPlayerName(event.target.value)} maxLength={20} className="mt-2 w-full rounded-lg border border-white/[.12] bg-black/15 px-3 py-2.5 font-mono text-xs text-white outline-none transition focus:border-[#4f9bff]" /></label><label><span className="eyebrow">ROOM CODE</span><input value={roomCode} onChange={(event) => onRoomCode(event.target.value.toUpperCase())} maxLength={20} className="mt-2 w-full rounded-lg border border-white/[.12] bg-black/15 px-3 py-2.5 font-mono text-xs text-white outline-none transition focus:border-[#4f9bff]" /></label>{connected ? <Button onClick={onDisconnect} variant="outline" className="mt-1 h-10 border-[#ff7474]/35 bg-[#ff7474]/[.06] font-display text-[10px] tracking-[.1em] text-[#ff9e9e] hover:bg-[#ff7474]/[.14] hover:text-white">LEAVE ROOM</Button> : <Button onClick={onConnect} disabled={roomStatus === "connecting"} className="mt-1 h-10 bg-[#4f9bff] font-display text-[10px] tracking-[.1em] text-white hover:bg-[#72b2ff]">{roomStatus === "connecting" ? "CONNECTING..." : "CONNECT ROOM"}</Button>}</div><p className="mt-4 text-[10px] leading-relaxed text-[#71858a]">Cloudflare公開時に <span className="font-mono text-[#8fc5ff]">VITE_ROOM_WS_URL</span> を設定すると、同じルームコードの参加者と即時同期します。</p></div><div className="p-5"><div className="flex items-center justify-between"><div><p className="eyebrow">ROOM ACTIVITY</p><p className="mt-1 text-sm text-[#c4d2d1]">参加者 {connected ? Math.max(1, participants.length) : 1} 名</p></div><Globe2 size={18} className="text-[#74b5ff]" /></div><div className="mt-4 divide-y divide-white/[.07] rounded-lg border border-white/[.08] bg-black/10">{activity.length === 0 ? <div className="px-4 py-5 text-sm leading-relaxed text-[#84979b]">接続すると、このルームの参加・開封・売買の要約がここに流れます。</div> : activity.map((entry) => <div key={entry.id} className="flex items-center justify-between gap-3 px-4 py-3"><p className="min-w-0 truncate text-xs text-white"><span className="mr-2 font-mono text-[10px] text-[#8fc5ff]">{entry.player}</span>{entry.action}</p><span className="shrink-0 font-mono text-[9px] text-[#75888c]">{new Date(entry.createdAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}</span></div>)}</div></div></div></section>;
+}
+
+function FloorLeaderboard({ playerName, level, archiveCount, missionCount, roomStatus, participants }: { playerName: string; level: number; archiveCount: number; missionCount: number; roomStatus: RoomStatus; participants: RoomParticipant[] }) {
+  const self: Required<Pick<RoomParticipant, "id" | "name" | "status" | "level" | "archiveCount" | "missionCount">> = { id: "local", name: playerName.trim() || "PULSE PLAYER", status: "online", level, archiveCount, missionCount };
+  const entries = [self, ...participants.filter((participant) => participant.id !== "local" && participant.level !== undefined)].sort((a, b) => (b.level ?? 0) - (a.level ?? 0) || (b.archiveCount ?? 0) - (a.archiveCount ?? 0));
+  const hasSharedScores = entries.length > 1;
+  return <section className="mt-6 overflow-hidden rounded-2xl border border-[#4f9bff]/25 bg-[#0b1519]"><div className="flex flex-col justify-between gap-3 border-b border-white/[.08] px-5 py-5 sm:flex-row sm:items-center sm:px-6"><div><p className="eyebrow text-[#74b5ff]">FLOOR LEADERBOARD / SAFE PROGRESS</p><h2 className="mt-1 font-display text-xl font-semibold text-white">取引フロアの進行</h2><p className="mt-1 text-xs text-[#8ea0a4]">レベル・ミッション・アーカイブ数のみを比較します。資産額と取引内容は共有しません。</p></div><span className={`rounded-lg border px-3 py-2 font-mono text-[10px] ${hasSharedScores ? "border-[#5ee8b0]/30 bg-[#5ee8b0]/[.08] text-[#5ee8b0]" : "border-white/[.12] bg-white/[.04] text-[#9aabb0]"}`}>{hasSharedScores ? "ROOM RANKING" : roomStatus === "connected" ? "WAITING FOR FLOOR DATA" : "LOCAL RECORD"}</span></div><div className="divide-y divide-white/[.07]">{entries.slice(0, 5).map((entry, index) => <div key={entry.id} className={`grid grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-3 px-5 py-4 sm:px-6 ${entry.id === "local" ? "bg-[#4f9bff]/[.055]" : ""}`}><span className={`grid h-7 w-7 place-items-center rounded-md font-mono text-[10px] ${index === 0 ? "bg-[#f6c96a]/[.14] text-[#f6c96a]" : "bg-white/[.06] text-[#9aaab0]"}`}>#{index + 1}</span><div className="min-w-0"><p className="truncate font-display text-sm font-semibold text-white">{entry.name}{entry.id === "local" && <span className="ml-2 font-mono text-[9px] font-normal text-[#8fc5ff]">YOU</span>}</p><p className="mt-0.5 font-mono text-[9px] text-[#80939a]">LEVEL {entry.level ?? "—"} · {entry.missionCount ?? 0}/3 MISSIONS</p></div><div className="text-right"><p className="font-mono text-xs text-[#c9dbdf]">{entry.archiveCount ?? 0} ITEM</p><p className="mt-0.5 font-mono text-[9px] text-[#73878d]">ARCHIVE</p></div></div>)}</div></section>;
 }
 
 function ArchiveVault({ archive, activeFilter, onFilter, totalCount }: { archive: Reward[]; activeFilter: "ALL" | Reward["rarity"]; onFilter: (filter: "ALL" | Reward["rarity"]) => void; totalCount: number }) {

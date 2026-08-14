@@ -2,7 +2,7 @@
  * Pulse Terminal style: editorial trading desk with ink-navy surfaces,
  * restrained signal-lime/coral data states, Space Grotesk + IBM Plex Mono hierarchy.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   ArrowDownRight,
@@ -80,6 +80,11 @@ type ArchiveEffect = {
   description: string;
   creditBonus: number;
 };
+
+type SeriesProgress = { pack: GachaPack; title: string; subtitle: string; owned: number; total: number; complete: boolean };
+type RoomStatus = "offline" | "connecting" | "connected" | "setup";
+type RoomActivity = { id: string; player: string; action: string; createdAt: number };
+type RoomParticipant = { id: string; name: string; status: "online" | "away" };
 
 type AssetProfile = {
   oneLine: string;
@@ -164,6 +169,14 @@ const ARCHIVE_EFFECTS: Record<Reward["rarity"], ArchiveEffect> = {
   RARE: { key: "news", label: "NEWS LENS", description: "選択中の銘柄に関係するニュースを、短い要点として優先表示。", creditBonus: 0 },
   EPIC: { key: "range", label: "RANGE SCOPE", description: "チャートの直近レンジを数値化し、値動きの大きさを読みやすくする。", creditBonus: 0 },
   LEGEND: { key: "brief", label: "THESIS BRIEF", description: "選択中銘柄に効いている理由を、ひとつの短いブリーフとして表示。", creditBonus: 0 },
+};
+
+const PACK_SERIES: Record<GachaPack["id"], { title: string; subtitle: string }> = {
+  signal: { title: "OPEN SIGNAL / 01", subtitle: "市場を読み始めるための基本シリーズ" },
+  sector: { title: "SECTOR FILE / 02", subtitle: "業界のつながりを集める限定シリーズ" },
+  style: { title: "PULSE ID / 03", subtitle: "自分の判断スタイルを残す限定シリーズ" },
+  macro: { title: "MACRO FLASH / 04", subtitle: "世界の流れを短く読む限定シリーズ" },
+  chart: { title: "CHART LAB / 05", subtitle: "値動きの形を観測する限定シリーズ" },
 };
 
 const COMPANY_PROFILES: Record<string, AssetProfile> = {
@@ -276,6 +289,12 @@ export default function Home() {
   const [activeArchiveId, setActiveArchiveId] = useState<string | null>(null);
   const [isOpening, setIsOpening] = useState(false);
   const [openingPack, setOpeningPack] = useState<GachaPack | null>(null);
+  const [playerName, setPlayerName] = useState("PULSE PLAYER");
+  const [roomCode, setRoomCode] = useState("PULSE-01");
+  const [roomStatus, setRoomStatus] = useState<RoomStatus>("offline");
+  const [roomParticipants, setRoomParticipants] = useState<RoomParticipant[]>([]);
+  const [roomActivity, setRoomActivity] = useState<RoomActivity[]>([]);
+  const socketRef = useRef<WebSocket | null>(null);
 
   const selected = assets.find((asset) => asset.id === selectedId) ?? assets[0];
   const filteredAssets = tab === "all" ? assets : assets.filter((asset) => asset.kind === tab);
@@ -298,6 +317,12 @@ export default function Home() {
   const visibleArchive = archiveFilter === "ALL" ? archive : archive.filter((reward) => reward.rarity === archiveFilter);
   const activeArchive = archive.find((reward) => reward.id === activeArchiveId) ?? null;
   const activeEffect = activeArchive ? ARCHIVE_EFFECTS[activeArchive.rarity] : null;
+  const seriesProgress = useMemo<SeriesProgress[]>(() => GACHA_PACKS.map((pack) => {
+    const ids = new Set(pack.rewards.map((reward) => reward.id));
+    const owned = new Set(archive.filter((reward) => ids.has(reward.id)).map((reward) => reward.id)).size;
+    const info = PACK_SERIES[pack.id];
+    return { pack, title: info.title, subtitle: info.subtitle, owned, total: pack.rewards.length, complete: owned === pack.rewards.length };
+  }), [archive]);
 
   useEffect(() => {
     if (!profileOpen) return;
@@ -311,6 +336,8 @@ export default function Home() {
   useEffect(() => {
     setChartCandles(createCandles(selected, timeframe));
   }, [selectedId, timeframe]);
+
+  useEffect(() => () => socketRef.current?.close(), []);
 
   useEffect(() => {
     if (gachaOpen || !gachaResult) return;
@@ -377,6 +404,7 @@ export default function Home() {
       const creditGain = 25 + (activeEffect?.creditBonus ?? 0);
       setCredits((current) => current + creditGain);
       toast.success(`${selected.code} を ${quantity} 単位購入`, { description: `取引の記録で Archive Credit +${creditGain}` });
+      broadcastRoomActivity(`${selected.code} を ${quantity} UNIT 購入`);
     } else {
       if (existing.quantity < quantity) return toast.error("保有数量が不足しています", { description: `${selected.code} の保有: ${existing.quantity} 単位` });
       setCash((current) => current + value);
@@ -384,6 +412,7 @@ export default function Home() {
       const creditGain = 15 + (activeEffect?.creditBonus ?? 0);
       setCredits((current) => current + creditGain);
       toast.success(`${selected.code} を ${quantity} 単位売却`, { description: `取引の記録で Archive Credit +${creditGain}` });
+      broadcastRoomActivity(`${selected.code} を ${quantity} UNIT 売却`);
     }
   };
 
@@ -398,6 +427,7 @@ export default function Home() {
     setGachaResult(reward);
     setArchive((current) => [reward, ...current]);
     toast.success(`${RARITY_META[reward.rarity].label} を獲得`, { description: `${reward.name} をアーカイブに保存しました。` });
+    broadcastRoomActivity(`${pack.label} から ${RARITY_META[reward.rarity].label} を獲得`);
   };
 
   const selectedHolding = holdings[selected.id] ?? { quantity: 0, avgCost: 0 };
@@ -405,6 +435,52 @@ export default function Home() {
   const navigateTo = (section: NavigationSection) => {
     setActiveSection(section);
     document.getElementById(section)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const broadcastRoomActivity = (action: string) => {
+    const activity: RoomActivity = { id: `local-${Date.now()}`, player: playerName.trim() || "PULSE PLAYER", action, createdAt: Date.now() };
+    setRoomActivity((current) => [activity, ...current].slice(0, 8));
+    if (socketRef.current?.readyState === WebSocket.OPEN) socketRef.current.send(JSON.stringify({ type: "activity", roomCode, activity }));
+  };
+
+  const connectRoom = () => {
+    const endpoint = import.meta.env.VITE_ROOM_WS_URL as string | undefined;
+    if (!endpoint) {
+      setRoomStatus("setup");
+      return toast.info("共有ルームの接続先を設定してください", { description: "Cloudflare公開時に VITE_ROOM_WS_URL を追加すると接続できます。" });
+    }
+    socketRef.current?.close();
+    setRoomStatus("connecting");
+    try {
+      const url = new URL(endpoint);
+      url.searchParams.set("room", roomCode.trim() || "PULSE-01");
+      const socket = new WebSocket(url.toString());
+      socketRef.current = socket;
+      socket.onopen = () => {
+        setRoomStatus("connected");
+        socket.send(JSON.stringify({ type: "join", roomCode, player: { id: "local", name: playerName.trim() || "PULSE PLAYER", status: "online" } }));
+        broadcastRoomActivity("ルームに参加");
+      };
+      socket.onmessage = (message) => {
+        try {
+          const payload = JSON.parse(message.data as string) as { type?: string; participants?: RoomParticipant[]; activity?: RoomActivity };
+          if (payload.type === "presence" && payload.participants) setRoomParticipants(payload.participants);
+          if (payload.type === "activity" && payload.activity) setRoomActivity((current) => [payload.activity!, ...current.filter((entry) => entry.id !== payload.activity!.id)].slice(0, 8));
+        } catch { /* ignore malformed room events */ }
+      };
+      socket.onclose = () => setRoomStatus("offline");
+      socket.onerror = () => setRoomStatus("offline");
+    } catch {
+      setRoomStatus("setup");
+      toast.error("共有ルームのURLを確認してください");
+    }
+  };
+
+  const disconnectRoom = () => {
+    socketRef.current?.close();
+    socketRef.current = null;
+    setRoomStatus("offline");
+    setRoomParticipants([]);
   };
 
   return (
@@ -503,6 +579,8 @@ export default function Home() {
             <section className="relative overflow-hidden rounded-2xl border border-[#d19b4b]/25 bg-[#16130f] p-6"><img src={GACHA_IMAGE} alt="分析アーカイブのカプセル" className="absolute -right-14 -top-12 h-64 w-64 object-cover opacity-45 mix-blend-screen" /><div className="relative flex h-full flex-col"><div className="flex items-center justify-between"><div><p className="eyebrow text-[#f5c56b]">SEALED ANALYSIS ARCHIVE</p><p className="mt-1 font-mono text-[9px] tracking-[.1em] text-[#8e704c]">3 PACKS / RECORD {String(archive.length + 2001).padStart(4, "0")}</p></div><Gem size={18} className="text-[#f5c56b]" /></div><h2 className="mt-4 max-w-[250px] font-display text-2xl font-semibold leading-tight text-white">集め方も、自分で選ぶ。</h2><p className="mt-3 max-w-[330px] text-xs leading-relaxed text-[#b49e86]">ニュース、業界、スタイル。好きなテーマで記録を集めよう。市場の価格やニュースには影響しません。</p><div className="mt-4 flex gap-1.5">{GACHA_PACKS.map((pack) => <span key={pack.id} className="rounded-md border px-2 py-1 font-mono text-[8px] tracking-[.08em]" style={{ color: pack.accent, borderColor: `${pack.accent}40`, backgroundColor: `${pack.accent}0d` }}>{pack.kicker}</span>)}</div><div className="mt-auto flex items-center justify-between border-t border-[#d19b4b]/20 pt-5"><div><p className="font-mono text-[9px] tracking-[.12em] text-[#a78a6d]">AVAILABLE</p><p className="mt-1 font-mono text-xl text-[#f6cb72]">{credits} <span className="text-[10px]">CREDIT</span></p></div><Button onClick={() => { setGachaOpen(true); setGachaResult(null); setActivePack(null); }} className="bg-[#f6c96a] font-display text-[11px] font-semibold tracking-[.08em] text-[#1c1408] hover:bg-[#ffe09a]">CHOOSE PACK</Button></div></div></section>
           </section>
           <div id="archive-vault"><ArchiveVault archive={visibleArchive} activeFilter={archiveFilter} onFilter={setArchiveFilter} totalCount={archive.length} /></div>
+          <SeriesCollectionDeck series={seriesProgress} />
+          <SharedRoomPanel playerName={playerName} roomCode={roomCode} roomStatus={roomStatus} participants={roomParticipants} activity={roomActivity} onPlayerName={setPlayerName} onRoomCode={setRoomCode} onConnect={connectRoom} onDisconnect={disconnectRoom} />
         </div>
       </section>
 
@@ -564,6 +642,17 @@ function ArchiveModuleRack({ archive, activeArchive, activeEffect, onActivate, o
   const range = candles.length ? ((Math.max(...candles.map((candle) => candle.high)) - Math.min(...candles.map((candle) => candle.low))) / Math.max(0.01, candles.at(-1)?.close ?? 1)) * 100 : 0;
   const insight = activeEffect?.key === "credit" ? "次の売買では、通常のCreditに +5 が追加されます。" : activeEffect?.key === "news" ? `注目ニュース: ${catalysts[0]?.title ?? "選択中銘柄へのニュースを待機中"}` : activeEffect?.key === "range" ? `直近レンジ: ${range.toFixed(2)}% — 数字が大きいほど、いまの動きが大きめです。` : activeEffect?.key === "brief" ? `いまの要因: ${catalysts[0]?.copy ?? "選択中銘柄への材料を待機中"}` : "アーカイブを入手すると、ここで市場を変えない分析モジュールとして使えます。";
   return <section className="mt-5 overflow-hidden rounded-2xl border border-[#4f9bff]/25 bg-[#0b1519]"><div className="flex flex-col gap-4 border-b border-white/[.08] px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="eyebrow text-[#74b5ff]">ARCHIVE MODULE / 効果を選ぶ</p><p className="mt-1 font-display text-lg font-semibold text-white">入手記録を、分析に使う。</p><p className="mt-1 text-[11px] leading-relaxed text-[#84979a]">どの効果も価格・ニュース・約定には影響しません。</p></div>{activeArchive ? <button type="button" onClick={onDeactivate} className="rounded-lg border border-[#4f9bff]/30 bg-[#4f9bff]/[.09] px-3 py-2 font-mono text-[10px] text-[#9bcaff] transition hover:bg-[#4f9bff]/[.16]">EJECT MODULE</button> : <span className="rounded-lg border border-white/[.1] bg-white/[.04] px-3 py-2 font-mono text-[10px] text-[#8ca0a3]">NO MODULE</span>}</div>{activeArchive && activeEffect ? <div className="grid gap-3 border-b border-white/[.07] bg-[#4f9bff]/[.06] p-4 sm:grid-cols-[auto_1fr]"><span className="grid h-10 w-10 place-items-center rounded-lg" style={{ color: RARITY_META[activeArchive.rarity].color, backgroundColor: RARITY_META[activeArchive.rarity].background }}><RewardIcon type={activeArchive.icon} /></span><div><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-[10px] tracking-[.12em] text-[#8fc5ff]">ACTIVE / {activeEffect.label}</span><span className="rounded border px-1.5 py-0.5 font-mono text-[8px]" style={{ color: RARITY_META[activeArchive.rarity].color, borderColor: RARITY_META[activeArchive.rarity].border }}>{activeArchive.rarity}</span></div><p className="mt-1 text-sm font-medium text-white">{activeArchive.name}</p><p className="mt-1 text-[11px] leading-relaxed text-[#b7c8ca]">{insight}</p></div></div> : null}<div className="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-4">{archive.length === 0 ? <p className="sm:col-span-2 lg:col-span-4 text-sm text-[#8ca0a3]">まだ使えるアーカイブはありません。ガチャで入手すると、有効化ボタンがここに表示されます。</p> : archive.slice(0, 4).map((reward, index) => { const effect = ARCHIVE_EFFECTS[reward.rarity]; const active = activeArchive?.id === reward.id; return <div key={`${reward.id}-${index}`} className={`rounded-xl border p-3 ${active ? "border-[#4f9bff]/50 bg-[#4f9bff]/[.1]" : "border-white/[.09] bg-white/[.025]"}`}><div className="flex items-center justify-between gap-2"><span className="font-mono text-[9px]" style={{ color: RARITY_META[reward.rarity].color }}>{reward.rarity}</span><RewardIcon type={reward.icon} /></div><p className="mt-3 font-display text-sm font-semibold text-white">{reward.name}</p><p className="mt-1 min-h-[32px] text-[10px] leading-relaxed text-[#90a4a6]">{effect.label}: {effect.description}</p><button type="button" onClick={() => onActivate(reward)} className={`mt-3 w-full rounded-md px-2 py-2 font-mono text-[9px] tracking-[.08em] transition ${active ? "bg-[#4f9bff] text-white" : "border border-[#4f9bff]/30 text-[#8fc5ff] hover:bg-[#4f9bff]/[.12]"}`}>{active ? "ACTIVE" : "ACTIVATE"}</button></div>; })}</div></section>;
+}
+
+function SeriesCollectionDeck({ series }: { series: SeriesProgress[] }) {
+  return <section className="mt-6 overflow-hidden rounded-2xl border border-[#4f9bff]/25 bg-[#0b1519]"><div className="flex flex-col justify-between gap-3 border-b border-white/[.08] px-5 py-5 sm:flex-row sm:items-center sm:px-6"><div><p className="eyebrow text-[#74b5ff]">LIMITED SERIES / PACK COLLECTION</p><h2 className="mt-1 font-display text-xl font-semibold text-white">パック限定シリーズ</h2><p className="mt-1 text-xs text-[#8ea0a4]">各パックの4アイテムを集めると、そのシリーズはCOMPLETEになります。</p></div><span className="rounded-lg border border-[#4f9bff]/25 bg-[#4f9bff]/[.08] px-3 py-2 font-mono text-[10px] text-[#8fc5ff]">5 SERIES</span></div><div className="grid gap-px bg-white/[.07] sm:grid-cols-2 lg:grid-cols-5">{series.map((entry) => <article key={entry.pack.id} className="bg-[#0b1519] p-4"><div className="flex items-center justify-between"><span className="font-mono text-[9px] tracking-[.12em]" style={{ color: entry.pack.accent }}>{entry.pack.kicker}</span><span className={`rounded border px-1.5 py-0.5 font-mono text-[8px] ${entry.complete ? "border-[#5ee8b0]/45 bg-[#5ee8b0]/[.1] text-[#5ee8b0]" : "border-white/[.12] text-[#789095]"}`}>{entry.complete ? "COMPLETE" : `${entry.owned}/${entry.total}`}</span></div><h3 className="mt-4 font-display text-base font-semibold text-white">{entry.title}</h3><p className="mt-1 min-h-[34px] text-[10px] leading-relaxed text-[#8ea0a4]">{entry.subtitle}</p><div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/[.08]"><div className="h-full rounded-full" style={{ width: `${(entry.owned / entry.total) * 100}%`, backgroundColor: entry.pack.accent }} /></div><p className="mt-2 font-mono text-[9px] text-[#788b8f]">{entry.owned === 0 ? "未収集" : entry.complete ? "SERIES COMPLETE" : `あと ${entry.total - entry.owned} ITEM`}</p></article>)}</div></section>;
+}
+
+function SharedRoomPanel({ playerName, roomCode, roomStatus, participants, activity, onPlayerName, onRoomCode, onConnect, onDisconnect }: { playerName: string; roomCode: string; roomStatus: RoomStatus; participants: RoomParticipant[]; activity: RoomActivity[]; onPlayerName: (value: string) => void; onRoomCode: (value: string) => void; onConnect: () => void; onDisconnect: () => void }) {
+  const connected = roomStatus === "connected";
+  const statusLabel = roomStatus === "connected" ? "ONLINE" : roomStatus === "connecting" ? "CONNECTING" : roomStatus === "setup" ? "ENDPOINT NEEDED" : "OFFLINE";
+  const statusColor = connected ? "text-[#5ee8b0] border-[#5ee8b0]/35 bg-[#5ee8b0]/[.08]" : roomStatus === "connecting" ? "text-[#8fc5ff] border-[#4f9bff]/35 bg-[#4f9bff]/[.08]" : "text-[#a3b1b5] border-white/[.12] bg-white/[.04]";
+  return <section className="mt-6 overflow-hidden rounded-2xl border border-[#4f9bff]/25 bg-[#0b1519]"><div className="flex flex-col justify-between gap-4 border-b border-white/[.08] px-5 py-5 sm:flex-row sm:items-center sm:px-6"><div><p className="eyebrow text-[#74b5ff]">SHARED ROOM / ONLINE PULSE</p><h2 className="mt-1 font-display text-xl font-semibold text-white">みんなの市場デスク</h2><p className="mt-1 text-xs text-[#8ea0a4]">参加、開封、売買の要約だけを共有します。価格や排出率は共有されません。</p></div><span className={`rounded-lg border px-3 py-2 font-mono text-[10px] ${statusColor}`}>{statusLabel}</span></div><div className="grid gap-0 lg:grid-cols-[.78fr_1.22fr]"><div className="border-b border-white/[.08] p-5 lg:border-b-0 lg:border-r"><div className="grid gap-3"><label><span className="eyebrow">PLAYER NAME</span><input value={playerName} onChange={(event) => onPlayerName(event.target.value)} maxLength={20} className="mt-2 w-full rounded-lg border border-white/[.12] bg-black/15 px-3 py-2.5 font-mono text-xs text-white outline-none transition focus:border-[#4f9bff]" /></label><label><span className="eyebrow">ROOM CODE</span><input value={roomCode} onChange={(event) => onRoomCode(event.target.value.toUpperCase())} maxLength={20} className="mt-2 w-full rounded-lg border border-white/[.12] bg-black/15 px-3 py-2.5 font-mono text-xs text-white outline-none transition focus:border-[#4f9bff]" /></label>{connected ? <Button onClick={onDisconnect} variant="outline" className="mt-1 h-10 border-[#ff7474]/35 bg-[#ff7474]/[.06] font-display text-[10px] tracking-[.1em] text-[#ff9e9e] hover:bg-[#ff7474]/[.14] hover:text-white">LEAVE ROOM</Button> : <Button onClick={onConnect} disabled={roomStatus === "connecting"} className="mt-1 h-10 bg-[#4f9bff] font-display text-[10px] tracking-[.1em] text-white hover:bg-[#72b2ff]">{roomStatus === "connecting" ? "CONNECTING..." : "CONNECT ROOM"}</Button>}</div><p className="mt-4 text-[10px] leading-relaxed text-[#71858a]">Cloudflare公開時に <span className="font-mono text-[#8fc5ff]">VITE_ROOM_WS_URL</span> を設定すると、同じルームコードの参加者と即時同期します。</p></div><div className="p-5"><div className="flex items-center justify-between"><div><p className="eyebrow">ROOM ACTIVITY</p><p className="mt-1 text-sm text-[#c4d2d1]">参加者 {connected ? Math.max(1, participants.length) : 1} 名</p></div><Globe2 size={18} className="text-[#74b5ff]" /></div><div className="mt-4 divide-y divide-white/[.07] rounded-lg border border-white/[.08] bg-black/10">{activity.length === 0 ? <div className="px-4 py-5 text-sm leading-relaxed text-[#84979b]">接続すると、このルームの参加・開封・売買の要約がここに流れます。</div> : activity.map((entry) => <div key={entry.id} className="flex items-center justify-between gap-3 px-4 py-3"><p className="min-w-0 truncate text-xs text-white"><span className="mr-2 font-mono text-[10px] text-[#8fc5ff]">{entry.player}</span>{entry.action}</p><span className="shrink-0 font-mono text-[9px] text-[#75888c]">{new Date(entry.createdAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}</span></div>)}</div></div></div></section>;
 }
 
 function ArchiveVault({ archive, activeFilter, onFilter, totalCount }: { archive: Reward[]; activeFilter: "ALL" | Reward["rarity"]; onFilter: (filter: "ALL" | Reward["rarity"]) => void; totalCount: number }) {

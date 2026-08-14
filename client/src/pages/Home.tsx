@@ -24,6 +24,8 @@ import {
   Newspaper,
   Plus,
   Radio,
+  RotateCcw,
+  Save,
   ShieldCheck,
   Sparkles,
   TrendingDown,
@@ -85,6 +87,19 @@ type SeriesProgress = { pack: GachaPack; title: string; subtitle: string; owned:
 type RoomStatus = "offline" | "connecting" | "connected" | "setup";
 type RoomActivity = { id: string; player: string; action: string; createdAt: number };
 type RoomParticipant = { id: string; name: string; status: "online" | "away" };
+type SavedGame = {
+  version: 1;
+  savedAt: number;
+  assets: Asset[];
+  cash: number;
+  holdings: Record<string, Holding>;
+  credits: number;
+  archive: Reward[];
+  activeArchiveId: string | null;
+  selectedId: string;
+  tab: "all" | AssetKind;
+  timeframe: Timeframe;
+};
 
 type AssetProfile = {
   oneLine: string;
@@ -111,6 +126,20 @@ const HERO_IMAGE = "/manus-storage/market-pulse-hero_2e8a32ff.png";
 const GACHA_IMAGE = "/manus-storage/market-pulse-gacha_73e0409e.png";
 const TEXTURE_IMAGE = "/manus-storage/market-pulse-texture_11d38308.png";
 const LOGO_IMAGE = "/manus-storage/market-pulse-logo_3ff09442.png";
+const SAVE_KEY = "market-pulse-save-v1";
+
+function readSavedGame(): SavedGame | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<SavedGame>;
+    if (parsed.version !== 1 || !Array.isArray(parsed.assets) || typeof parsed.cash !== "number" || !parsed.holdings || !Array.isArray(parsed.archive)) return null;
+    return parsed as SavedGame;
+  } catch {
+    return null;
+  }
+}
 
 const INITIAL_ASSETS: Asset[] = [
   { id: "orca", code: "ORCA", name: "Orca Systems", kind: "Stock", price: 184.26, change: 1.84, history: [176.2, 177.8, 175.1, 178.4, 180.3, 179.1, 181.6, 182.2, 181.1, 183.4, 184.26], signal: "AI インフラ", sector: "Technology" },
@@ -288,25 +317,26 @@ function RewardIcon({ type }: { type: Reward["icon"] }) {
 }
 
 export default function Home() {
-  const [assets, setAssets] = useState<Asset[]>(INITIAL_ASSETS);
+  const [initialSave] = useState<SavedGame | null>(() => readSavedGame());
+  const [assets, setAssets] = useState<Asset[]>(() => initialSave?.assets ?? INITIAL_ASSETS);
   const [events, setEvents] = useState<MarketEvent[]>(STARTING_EVENTS);
-  const [selectedId, setSelectedId] = useState("orca");
-  const [cash, setCash] = useState(100000);
-  const [holdings, setHoldings] = useState<Record<string, Holding>>({});
+  const [selectedId, setSelectedId] = useState(() => initialSave?.selectedId ?? "orca");
+  const [cash, setCash] = useState(() => initialSave?.cash ?? 100000);
+  const [holdings, setHoldings] = useState<Record<string, Holding>>(() => initialSave?.holdings ?? {});
   const [tradeQuantity, setTradeQuantity] = useState(10);
-  const [tab, setTab] = useState<"all" | AssetKind>("all");
-  const [credits, setCredits] = useState(350);
+  const [tab, setTab] = useState<"all" | AssetKind>(() => initialSave?.tab ?? "all");
+  const [credits, setCredits] = useState(() => initialSave?.credits ?? 350);
   const [gachaOpen, setGachaOpen] = useState(false);
   const [gachaResult, setGachaResult] = useState<Reward | null>(null);
-  const [archive, setArchive] = useState<Reward[]>([]);
+  const [archive, setArchive] = useState<Reward[]>(() => initialSave?.archive ?? []);
   const [tick, setTick] = useState(1);
-  const [timeframe, setTimeframe] = useState<Timeframe>("5M");
+  const [timeframe, setTimeframe] = useState<Timeframe>(() => initialSave?.timeframe ?? "5M");
   const [profileOpen, setProfileOpen] = useState(false);
   const [activePack, setActivePack] = useState<GachaPack | null>(null);
   const [activeSection, setActiveSection] = useState<NavigationSection>("markets");
   const [archiveFilter, setArchiveFilter] = useState<"ALL" | Reward["rarity"]>("ALL");
   const [chartCandles, setChartCandles] = useState<Candle[]>(() => createCandles(INITIAL_ASSETS[0], "5M"));
-  const [activeArchiveId, setActiveArchiveId] = useState<string | null>(null);
+  const [activeArchiveId, setActiveArchiveId] = useState<string | null>(() => initialSave?.activeArchiveId ?? null);
   const [isOpening, setIsOpening] = useState(false);
   const [openingPack, setOpeningPack] = useState<GachaPack | null>(null);
   const [playerName, setPlayerName] = useState("PULSE PLAYER");
@@ -314,6 +344,7 @@ export default function Home() {
   const [roomStatus, setRoomStatus] = useState<RoomStatus>("offline");
   const [roomParticipants, setRoomParticipants] = useState<RoomParticipant[]>([]);
   const [roomActivity, setRoomActivity] = useState<RoomActivity[]>([]);
+  const [savedAt, setSavedAt] = useState<number | null>(() => initialSave?.savedAt ?? null);
   const socketRef = useRef<WebSocket | null>(null);
 
   const selected = assets.find((asset) => asset.id === selectedId) ?? assets[0];
@@ -356,6 +387,30 @@ export default function Home() {
   useEffect(() => {
     setChartCandles(createCandles(selected, timeframe));
   }, [selectedId, timeframe]);
+
+  const createSaveSnapshot = (): SavedGame => ({ version: 1, savedAt: Date.now(), assets, cash, holdings, credits, archive, activeArchiveId, selectedId, tab, timeframe });
+
+  const saveNow = (showToast = false) => {
+    try {
+      const snapshot = createSaveSnapshot();
+      window.localStorage.setItem(SAVE_KEY, JSON.stringify(snapshot));
+      setSavedAt(snapshot.savedAt);
+      if (showToast) toast.success("ゲームを保存しました", { description: "このブラウザで続きから遊べます。" });
+    } catch {
+      if (showToast) toast.error("保存できませんでした", { description: "ブラウザの保存容量を確認してください。" });
+    }
+  };
+
+  const resetSave = () => {
+    if (!window.confirm("この端末のセーブデータを消して、最初から始めますか？")) return;
+    window.localStorage.removeItem(SAVE_KEY);
+    window.location.reload();
+  };
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => saveNow(false), 450);
+    return () => window.clearTimeout(timer);
+  }, [assets, cash, holdings, credits, archive, activeArchiveId, selectedId, tab, timeframe]);
 
   useEffect(() => () => socketRef.current?.close(), []);
 
@@ -568,6 +623,7 @@ export default function Home() {
           <section className="mt-5 flex flex-wrap items-center gap-2 rounded-xl border border-white/[.09] bg-white/[.025] px-4 py-3"><span className="mr-1 font-mono text-[9px] tracking-[.14em] text-[#60a5fa]">PLAY LOOP</span><span className="rounded-md bg-white/[.06] px-2.5 py-1 font-mono text-[10px] text-white">1. ニュースを読む</span><ChevronRight size={13} className="text-[#718187]" /><span className="rounded-md bg-white/[.06] px-2.5 py-1 font-mono text-[10px] text-white">2. 特徴を知る</span><ChevronRight size={13} className="text-[#718187]" /><span className="rounded-md bg-[#4f9bff]/[.14] px-2.5 py-1 font-mono text-[10px] text-[#74b5ff]">3. 売買する</span><span className="ml-auto font-mono text-[9px] text-[#718187]">読み終えたら、決めよう。</span></section>
 
           <div id="portfolio" className="scroll-mt-24"><AssetOverview cash={cash} marketValue={marketValue} equity={equity} pnl={positionPnL} positions={positions} /></div>
+          <SaveStatusPanel savedAt={savedAt} onSave={() => saveNow(true)} onReset={resetSave} />
           <ArchiveModuleRack archive={archive} activeArchive={activeArchive} activeEffect={activeEffect} onActivate={(reward) => { setActiveArchiveId(reward.id); toast.success(`${reward.name} を有効化`, { description: `${ARCHIVE_EFFECTS[reward.rarity].label} が利用できます。` }); }} onDeactivate={() => setActiveArchiveId(null)} candles={chartCandles} catalysts={activeCatalysts} />
 
           <div className="mt-5 grid gap-6 min-[760px]:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_370px]">
@@ -652,6 +708,11 @@ function AssetOverview({ cash, marketValue, equity, pnl, positions }: { cash: nu
 function MoneyTile({ label, value, accent }: { label: string; value: string; accent: "blue" | "green" | "red" }) {
   const colors = { blue: "border-[#4f9bff]/28 bg-[#4f9bff]/[.08] text-[#74b5ff]", green: "border-[#36d399]/28 bg-[#36d399]/[.08] text-[#36d399]", red: "border-[#ff7474]/28 bg-[#ff7474]/[.08] text-[#ff9292]" };
   return <div className={`min-w-0 rounded-lg border p-2.5 ${colors[accent]}`}><p className="font-mono text-[8px] tracking-[.1em] opacity-75">{label}</p><p className="mt-1 truncate font-mono text-[11px] font-medium text-white">{value}</p></div>;
+}
+
+function SaveStatusPanel({ savedAt, onSave, onReset }: { savedAt: number | null; onSave: () => void; onReset: () => void }) {
+  const label = savedAt ? new Date(savedAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "保存準備中";
+  return <section className="mt-4 flex flex-col gap-3 border-y border-[#4f9bff]/18 bg-[#4f9bff]/[.045] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><span className="grid h-8 w-8 place-items-center rounded-lg border border-[#4f9bff]/30 bg-[#4f9bff]/[.1] text-[#8fc5ff]"><Save size={15} /></span><div><p className="font-mono text-[10px] tracking-[.12em] text-[#8fc5ff]">LOCAL SAVE / AUTO ON</p><p className="mt-0.5 text-[11px] text-[#a9b9b9]">最終保存: {label} · このブラウザの端末内に保存されます。</p></div></div><div className="flex gap-2"><button type="button" onClick={onSave} className="rounded-md border border-[#4f9bff]/35 bg-[#4f9bff]/[.1] px-3 py-2 font-mono text-[9px] text-[#9bcaff] transition hover:bg-[#4f9bff]/[.2]">SAVE NOW</button><button type="button" onClick={onReset} className="flex items-center gap-1 rounded-md px-2 py-2 font-mono text-[9px] text-[#84969a] transition hover:bg-white/[.06] hover:text-[#ff9e9e]"><RotateCcw size={12} /> RESET</button></div></section>;
 }
 
 function ArchiveOpeningOverlay({ pack }: { pack: GachaPack }) {

@@ -248,5 +248,7 @@
 | `shared/midnight/types.ts` | 設計書 `08` の型定義の実装（参照実装） |
 | `shared/midnight/lap-solver.ts` | `03` §9 の準定常ラップソルバ参照実装 |
 | `shared/midnight/tsukuba.ts` | `08` §6 の TC2000 コースデータ（16区間・2,045 m） |
-| `shared/midnight/lap-solver.test.ts` | 上記3本の回帰テスト 22件（`08` §7 のバランス表を機械検証する） |
+| `shared/midnight/market.ts` | `10` の4市場（カタログ／ヤード／オークション／コネクション）の決定論生成・鑑定・落札・解体・入札エージェント |
+| `shared/midnight/lap-solver.test.ts` | ソルバの回帰テスト 22件（`08` §7 のバランス表を機械検証する） |
+| `shared/midnight/market.test.ts` | 市場の回帰テスト 34件（`10` §8「ランダム性の7原則」を機械検証する） |
 | `cloudflare_pages_deploy.md` / `.github/workflows/deploy-pages.yml` | 既存の配信経路（Web体験版に流用） |

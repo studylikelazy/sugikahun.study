@@ -209,16 +209,18 @@ function vitePluginStorageProxy(): Plugin {
   };
 }
 
+const isGitHubPages = process.env.GITHUB_PAGES === "true";
 const plugins = [
   react(),
   tailwindcss(),
   jsxLocPlugin(),
-  vitePluginManusRuntime(),
+  ...(isGitHubPages ? [] : [vitePluginManusRuntime()]),
   vitePluginManusDebugCollector(),
   vitePluginStorageProxy(),
 ];
 
 export default defineConfig({
+  base: isGitHubPages ? "/sugikahun.study/" : "/",
   plugins,
   resolve: {
     alias: {

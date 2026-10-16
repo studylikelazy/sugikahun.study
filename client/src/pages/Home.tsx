@@ -1,995 +1,2521 @@
-/**
- * Pulse Terminal style: editorial trading desk with ink-navy surfaces,
- * restrained signal-lime/coral data states, Space Grotesk + IBM Plex Mono hierarchy.
- */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
-  ArrowDownRight,
+  ArrowDownToLine,
+  ArrowRight,
   ArrowUpRight,
-  Archive,
-  Banknote,
-  Bell,
-  Box,
-  CandlestickChart,
-  ChevronRight,
-  CircleDollarSign,
+  BadgeJapaneseYen,
+  BatteryCharging,
+  Boxes,
+  CarFront,
+  Check,
+  CircleGauge,
   Clock3,
-  Crosshair,
-  Gem,
-  Globe2,
-  Info,
-  LineChart,
-  Minus,
-  Newspaper,
-  Plus,
+  Cog,
+  Factory,
+  Hammer,
+  Map,
+  MapPin,
+  LockKeyhole,
+  PackageCheck,
+  Pause,
+  Play,
   Radio,
   RotateCcw,
-  Save,
-  ShieldCheck,
+  Settings2,
+  Ship,
   Sparkles,
-  TrendingDown,
-  TrendingUp,
-  WalletCards,
+  Truck,
+  Wrench,
   X,
   Zap,
+  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { GameCanvas } from "@/components/GameCanvas";
 
-type AssetKind = "Stock" | "Crypto";
-type Asset = {
-  id: string;
-  code: string;
-  name: string;
-  kind: AssetKind;
-  price: number;
-  change: number;
-  history: number[];
-  signal: string;
-  sector: string;
+type View = "map" | "factory" | "garage";
+type DetailTab = "region" | "machine";
+type MachineId =
+  | "supply"
+  | "press"
+  | "engine"
+  | "tire"
+  | "assembly"
+  | "dispatch";
+type Stock = {
+  steel: number;
+  rubber: number;
+  chassis: number;
+  engines: number;
+  tireSets: number;
+  cars: number;
 };
+type MachineLevels = Record<MachineId, number>;
+type MachineSwitches = Record<MachineId, boolean>;
 
-type Candle = { time: string; open: number; high: number; low: number; close: number; volume: number };
-type Timeframe = "1M" | "5M" | "15M" | "1H" | "1D";
-type NavigationSection = "markets" | "portfolio" | "newsflow";
-
-type MarketEvent = {
-  id: string;
-  tag: string;
-  title: string;
-  copy: string;
-  source: string;
-  direction: "up" | "down" | "neutral";
-  impact: number;
-  effect: Record<string, number>;
-  age: number;
-};
-
-type Holding = { quantity: number; avgCost: number };
-type Rarity = "COMMON" | "RARE" | "EPIC" | "LEGEND" | "MYTHIC" | "LIMITED";
-type Reward = {
-  id: string;
-  name: string;
-  rarity: Rarity;
-  detail: string;
-  accent: string;
-  icon: "signal" | "news" | "radar" | "badge";
-};
-
-type ArchiveEffect = {
-  key: "credit" | "news" | "range" | "brief" | "bot";
-  label: string;
-  description: string;
-  creditBonus: number;
-};
-
-type SeriesProgress = { pack: GachaPack; title: string; subtitle: string; owned: number; total: number; complete: boolean };
-type RoomStatus = "offline" | "connecting" | "connected" | "setup";
-type RoomActivity = { id: string; player: string; action: string; createdAt: number };
-type RoomParticipant = { id: string; name: string; status: "online" | "away"; level?: number; archiveCount?: number; missionCount?: number };
-type BotAction = { assetId: string; side: "WATCH" | "ADD" | "TRIM"; reason: string; confidence: number; impact: number };
-type BotTrader = { id: string; name: string; role: string; strategy: string; accent: string; action: BotAction };
-type QuestKey = "news" | "trade" | "archive";
-type QuestProgress = Record<QuestKey, number>;
-type SavedGame = {
-  version: 1 | 2 | 3;
-  savedAt: number;
-  assets: Asset[];
+type GameData = {
+  version: 1;
   cash: number;
-  holdings: Record<string, Holding>;
-  credits: number;
-  archive: Reward[];
-  activeArchiveId: string | null;
-  selectedId: string;
-  tab: "all" | AssetKind;
-  timeframe: Timeframe;
-  xp?: number;
-  questProgress?: QuestProgress;
-  tutorialStep?: number;
-  botTrust?: Record<string, number>;
-  archiveShards?: number;
-  packStreak?: Partial<Record<GachaPack["id"], number>>;
+  stock: Stock;
+  levels: MachineLevels;
+  machineOn: MachineSwitches;
+  unlockedRegions: string[];
+  activeModel: string;
+  lifetimeCars: number;
+  shipments: number;
+  reputation: number;
+  tick: number;
+  contractClaimed: boolean;
 };
 
-type AssetProfile = {
-  oneLine: string;
-  archetype: string;
-  audience: string;
-  sensitivity: "HIGH" | "MID" | "LOW";
-  risk: "HIGH" | "MID" | "LOW";
-  strengths: [string, string, string];
-  watch: string;
-};
-
-type GachaPack = {
-  id: "signal" | "sector" | "style" | "macro" | "chart";
-  label: string;
-  kicker: string;
+type Region = {
+  id: string;
+  city: string;
+  mapName: string;
+  prefecture: string;
+  zone: string;
+  role: string;
+  detail: string;
+  effect: string;
   cost: number;
-  description: string;
-  accent: string;
-  icon: Reward["icon"];
-  rewards: Reward[];
+  x: number;
+  y: number;
+  dx: number;
+  dy: number;
+  anchor: "start" | "middle" | "end";
+  activeStart?: boolean;
+  icon: LucideIcon;
+  linkedMachine: MachineId;
 };
 
-const HERO_IMAGE = "/manus-storage/market-pulse-hero_2e8a32ff.png";
-const GACHA_IMAGE = "/manus-storage/market-pulse-gacha_73e0409e.png";
-const TEXTURE_IMAGE = "/manus-storage/market-pulse-texture_11d38308.png";
-const LOGO_IMAGE = "/manus-storage/market-pulse-logo_3ff09442.png";
-const SAVE_KEY = "market-pulse-save-v1";
-const QUESTS: Array<{ key: QuestKey; label: string; detail: string; goal: number; xp: number }> = [
-  { key: "news", label: "PULSE SCOUT", detail: "ニュースを2件読む", goal: 2, xp: 40 },
-  { key: "trade", label: "FIRST MOVE", detail: "売買を1回する", goal: 1, xp: 60 },
-  { key: "archive", label: "ARCHIVE CHECK", detail: "アーカイブを1回開く", goal: 1, xp: 30 },
-];
-const BOT_ROSTER: Array<Omit<BotTrader, "action">> = [
-  { id: "halo", name: "HALO", role: "NEWS SCOUT", strategy: "材料の波及先を先に確認", accent: "#c9f34a" },
-  { id: "byte", name: "BYTE", role: "RANGE READER", strategy: "値幅と出来高を記録", accent: "#74b5ff" },
-  { id: "ember", name: "EMBER", role: "MACRO WATCH", strategy: "金利とテーマの交差を観察", accent: "#f6c96a" },
-  { id: "mori", name: "MORI", role: "CALM HOLDER", strategy: "短期のノイズを避ける", accent: "#b9a4ff" },
-];
-const ARCHIVE_SHARD_VALUE: Record<Rarity, number> = { COMMON: 2, RARE: 5, EPIC: 12, LEGEND: 30, MYTHIC: 120, LIMITED: 320 };
+type VehicleModel = {
+  id: string;
+  name: string;
+  series: string;
+  style: string;
+  tagline: string;
+  spec: string;
+  payout: number;
+  unlockAt: number;
+  paint: string;
+  paintName: string;
+  body: "coupe" | "rally" | "roadster";
+};
 
-function readSavedGame(): SavedGame | null {
-  if (typeof window === "undefined") return null;
+const SAVE_KEY = "kobo-nippon-motor-grid-v1";
+const MAX_LEVEL = 5;
+const FRESH_STOCK: Stock = {
+  steel: 16,
+  rubber: 8,
+  chassis: 0,
+  engines: 0,
+  tireSets: 0,
+  cars: 0,
+};
+const BASE_LEVELS: MachineLevels = {
+  supply: 1,
+  press: 1,
+  engine: 1,
+  tire: 1,
+  assembly: 1,
+  dispatch: 1,
+};
+const BASE_SWITCHES: MachineSwitches = {
+  supply: true,
+  press: true,
+  engine: true,
+  tire: true,
+  assembly: true,
+  dispatch: true,
+};
+
+const REGIONS: Region[] = [
+  {
+    id: "sapporo",
+    city: "SAPPORO",
+    mapName: "札幌",
+    prefecture: "北海道",
+    zone: "HOKKAIDO",
+    role: "ALLOY SUPPLY",
+    detail:
+      "北の製鉄所から高純度スチールを直送。Tsukubaの素材ヤードへ供給します。",
+    effect: "鋼材 +1 / cycle",
+    cost: 280_000,
+    x: 650,
+    y: 78,
+    dx: 17,
+    dy: -7,
+    anchor: "start",
+    icon: Boxes,
+    linkedMachine: "supply",
+  },
+  {
+    id: "sendai",
+    city: "SENDAI",
+    mapName: "仙台",
+    prefecture: "宮城県",
+    zone: "TOHOKU",
+    role: "TUNING LAB",
+    detail:
+      "東北のチューニングラボ。輸出先との共同開発で、完成車の評価額を高めます。",
+    effect: "輸出額 +¥18,000 / car",
+    cost: 210_000,
+    x: 555,
+    y: 208,
+    dx: 17,
+    dy: -5,
+    anchor: "start",
+    icon: Zap,
+    linkedMachine: "dispatch",
+  },
+  {
+    id: "gunma",
+    city: "GUNMA",
+    mapName: "群馬",
+    prefecture: "群馬県",
+    zone: "KANTO",
+    role: "BODY WORKS",
+    detail:
+      "職人の手仕事が残るボディ工場。プレス工程に余裕を生み、車体の供給数が増えます。",
+    effect: "シャシー +1 / batch",
+    cost: 185_000,
+    x: 503,
+    y: 246,
+    dx: -12,
+    dy: -17,
+    anchor: "end",
+    icon: Hammer,
+    linkedMachine: "press",
+  },
+  {
+    id: "tsukuba",
+    city: "TSUKUBA",
+    mapName: "つくば",
+    prefecture: "茨城県",
+    zone: "KANTO",
+    role: "CENTRAL ASSEMBLY",
+    detail:
+      "研究学園都市に構える中枢工場。各地のパーツを集め、JDMを一台ずつ組み上げます。",
+    effect: "CENTRAL PLANT / ONLINE",
+    cost: 0,
+    x: 523,
+    y: 264,
+    dx: 18,
+    dy: 13,
+    anchor: "start",
+    activeStart: true,
+    icon: Factory,
+    linkedMachine: "assembly",
+  },
+  {
+    id: "tokyo",
+    city: "TOKYO",
+    mapName: "東京",
+    prefecture: "東京都",
+    zone: "KANTO",
+    role: "ORDER EXCHANGE",
+    detail:
+      "東京のストリートカルチャーと販売網。熱量の高いオーダーが集まります。",
+    effect: "販売ボーナス +¥15,000 / car",
+    cost: 0,
+    x: 500,
+    y: 284,
+    dx: 17,
+    dy: -1,
+    anchor: "start",
+    activeStart: true,
+    icon: Activity,
+    linkedMachine: "dispatch",
+  },
+  {
+    id: "yokohama",
+    city: "YOKOHAMA",
+    mapName: "横浜",
+    prefecture: "神奈川県",
+    zone: "KANTO",
+    role: "EXPORT TERMINAL",
+    detail:
+      "横浜港から世界へ。ここが開いていると完成車をまとめて輸出できます。",
+    effect: "完成車の輸出が可能",
+    cost: 0,
+    x: 486,
+    y: 302,
+    dx: -14,
+    dy: 17,
+    anchor: "end",
+    activeStart: true,
+    icon: Ship,
+    linkedMachine: "dispatch",
+  },
+  {
+    id: "shizuoka",
+    city: "SHIZUOKA",
+    mapName: "静岡",
+    prefecture: "静岡県",
+    zone: "CHUBU",
+    role: "RUBBER WORKS",
+    detail:
+      "富士山のふもとのゴム加工拠点。タイヤセルに安定した素材を送ります。",
+    effect: "ゴム供給ライン接続",
+    cost: 0,
+    x: 459,
+    y: 304,
+    dx: -7,
+    dy: -15,
+    anchor: "middle",
+    activeStart: true,
+    icon: CircleGauge,
+    linkedMachine: "tire",
+  },
+  {
+    id: "nagoya",
+    city: "NAGOYA",
+    mapName: "名古屋",
+    prefecture: "愛知県",
+    zone: "CHUBU",
+    role: "ENGINE WORKS",
+    detail:
+      "中部のエンジン工房。手組みのターボユニットをTsukubaへ送り出します。",
+    effect: "エンジン組立ライン接続",
+    cost: 0,
+    x: 426,
+    y: 322,
+    dx: -14,
+    dy: 14,
+    anchor: "end",
+    activeStart: true,
+    icon: Cog,
+    linkedMachine: "engine",
+  },
+  {
+    id: "osaka",
+    city: "OSAKA",
+    mapName: "大阪",
+    prefecture: "大阪府",
+    zone: "KANSAI",
+    role: "R&D GARAGE",
+    detail:
+      "関西の開発ガレージ。熟練エンジニアが全国の設備投資を後押しします。",
+    effect: "設備アップグレード費 -15%",
+    cost: 360_000,
+    x: 391,
+    y: 342,
+    dx: -14,
+    dy: 19,
+    anchor: "end",
+    icon: Wrench,
+    linkedMachine: "assembly",
+  },
+  {
+    id: "hiroshima",
+    city: "HIROSHIMA",
+    mapName: "広島",
+    prefecture: "広島県",
+    zone: "CHUGOKU",
+    role: "DRIVETRAIN LAB",
+    detail:
+      "中国地方の駆動系ラボ。組み上げたエンジンにもう一段の余裕を加えます。",
+    effect: "エンジン +1 / batch",
+    cost: 240_000,
+    x: 341,
+    y: 356,
+    dx: -12,
+    dy: -14,
+    anchor: "end",
+    icon: Cog,
+    linkedMachine: "engine",
+  },
+  {
+    id: "fukuoka",
+    city: "FUKUOKA",
+    mapName: "福岡",
+    prefecture: "福岡県",
+    zone: "KYUSHU",
+    role: "WEST COAST HUB",
+    detail:
+      "九州の輸出ハブ。西日本のマーケットとつながり、出荷価格を押し上げます。",
+    effect: "輸出価格 +15%",
+    cost: 300_000,
+    x: 278,
+    y: 388,
+    dx: -14,
+    dy: 14,
+    anchor: "end",
+    icon: Truck,
+    linkedMachine: "dispatch",
+  },
+];
+
+const VEHICLES: VehicleModel[] = [
+  {
+    id: "hachi-r",
+    name: "HACHI-R",
+    series: "KOBO / 01",
+    style: "FR TOUGE COUPE",
+    tagline: "峠を知り尽くした、原点の一台。",
+    spec: "FR · 2.0L TURBO · 6MT",
+    payout: 148_000,
+    unlockAt: 0,
+    paint: "#d95640",
+    paintName: "Akane Red",
+    body: "coupe",
+  },
+  {
+    id: "kitsune-gt",
+    name: "KITSUNE GT",
+    series: "KOBO / 04",
+    style: "AWD RALLY SPEC",
+    tagline: "雨の峠も、まっすぐ駆け抜ける。",
+    spec: "AWD · 2.4L TURBO · 6MT",
+    payout: 196_000,
+    unlockAt: 2,
+    paint: "#c5c7b2",
+    paintName: "Mist Silver",
+    body: "rally",
+  },
+  {
+    id: "mizu-8",
+    name: "MIZU-8",
+    series: "KOBO / 08",
+    style: "LIGHTWEIGHT ROADSTER",
+    tagline: "軽さを楽しむためだけに生まれた。",
+    spec: "FR · 1.6L NA · 5MT",
+    payout: 174_000,
+    unlockAt: 5,
+    paint: "#718d70",
+    paintName: "Moss Green",
+    body: "roadster",
+  },
+];
+
+const MACHINES: Array<{
+  id: MachineId;
+  name: string;
+  english: string;
+  area: string;
+  icon: LucideIcon;
+  input: string;
+  output: string;
+  baseCost: number;
+}> = [
+  {
+    id: "supply",
+    name: "素材ヤード",
+    english: "RAW MATERIAL",
+    area: "01 / INBOUND",
+    icon: Boxes,
+    input: "港湾・鉱材",
+    output: "鋼材",
+    baseCost: 85_000,
+  },
+  {
+    id: "press",
+    name: "ボディプレス",
+    english: "BODY PRESS",
+    area: "02 / STAMPING",
+    icon: Hammer,
+    input: "鋼材 ×2",
+    output: "シャシー",
+    baseCost: 118_000,
+  },
+  {
+    id: "engine",
+    name: "エンジン工房",
+    english: "ENGINE BAY",
+    area: "03 / POWERTRAIN",
+    icon: Cog,
+    input: "鋼材 ×3",
+    output: "エンジン",
+    baseCost: 148_000,
+  },
+  {
+    id: "tire",
+    name: "タイヤセル",
+    english: "TIRE CELL",
+    area: "04 / RUBBER",
+    icon: CircleGauge,
+    input: "ゴム ×2",
+    output: "タイヤセット",
+    baseCost: 92_000,
+  },
+  {
+    id: "assembly",
+    name: "最終組立",
+    english: "FINAL ASSEMBLY",
+    area: "05 / TSUKUBA",
+    icon: CarFront,
+    input: "パーツ一式",
+    output: "完成車",
+    baseCost: 175_000,
+  },
+  {
+    id: "dispatch",
+    name: "横浜輸出港",
+    english: "EXPORT DOCK",
+    area: "06 / SHIPPING",
+    icon: Ship,
+    input: "完成車",
+    output: "¥ / REP",
+    baseCost: 110_000,
+  },
+];
+
+const BASE_UPGRADE_COSTS: Record<MachineId, number> = {
+  supply: 85_000,
+  press: 118_000,
+  engine: 148_000,
+  tire: 92_000,
+  assembly: 175_000,
+  dispatch: 110_000,
+};
+
+function createFreshGame(): GameData {
+  return {
+    version: 1,
+    cash: 680_000,
+    stock: { ...FRESH_STOCK },
+    levels: { ...BASE_LEVELS },
+    machineOn: { ...BASE_SWITCHES },
+    unlockedRegions: ["tsukuba", "tokyo", "yokohama", "shizuoka", "nagoya"],
+    activeModel: "hachi-r",
+    lifetimeCars: 0,
+    shipments: 0,
+    reputation: 0,
+    tick: 0,
+    contractClaimed: false,
+  };
+}
+
+function loadGame(): GameData {
+  if (typeof window === "undefined") return createFreshGame();
   try {
     const raw = window.localStorage.getItem(SAVE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<SavedGame>;
-    if ((parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3) || !Array.isArray(parsed.assets) || typeof parsed.cash !== "number" || !parsed.holdings || !Array.isArray(parsed.archive)) return null;
-    return parsed as SavedGame;
+    if (!raw) return createFreshGame();
+    const parsed = JSON.parse(raw) as Partial<GameData>;
+    if (
+      parsed.version !== 1 ||
+      typeof parsed.cash !== "number" ||
+      !parsed.stock
+    )
+      return createFreshGame();
+    const fresh = createFreshGame();
+    return {
+      ...fresh,
+      ...parsed,
+      stock: { ...fresh.stock, ...parsed.stock },
+      levels: { ...fresh.levels, ...parsed.levels },
+      machineOn: { ...fresh.machineOn, ...parsed.machineOn },
+      unlockedRegions: Array.isArray(parsed.unlockedRegions)
+        ? parsed.unlockedRegions
+        : fresh.unlockedRegions,
+    };
   } catch {
-    return null;
+    return createFreshGame();
   }
 }
 
-const INITIAL_ASSETS: Asset[] = [
-  { id: "orca", code: "ORCA", name: "Orca Systems", kind: "Stock", price: 184.26, change: 1.84, history: [176.2, 177.8, 175.1, 178.4, 180.3, 179.1, 181.6, 182.2, 181.1, 183.4, 184.26], signal: "AI インフラ", sector: "Technology" },
-  { id: "vector", code: "VCTR", name: "Vector Finance", kind: "Stock", price: 96.34, change: 1.16, history: [92.8, 93.4, 94.1, 93.2, 94.9, 95.2, 94.6, 95.8, 96.0, 95.6, 96.34], signal: "決算修正", sector: "Financials" },
-  { id: "nori", code: "NORI", name: "Nori Energy", kind: "Stock", price: 72.48, change: -0.64, history: [74.6, 74.1, 73.8, 73.4, 74.2, 73.5, 72.8, 73.1, 72.9, 72.7, 72.48], signal: "金利感応", sector: "Energy" },
-  { id: "helio", code: "HLIO", name: "Helio Health", kind: "Stock", price: 128.73, change: 0.92, history: [124.3, 125.1, 125.8, 126.1, 125.6, 127.4, 126.9, 128.2, 127.7, 128.1, 128.73], signal: "治験進捗", sector: "Healthcare" },
-  { id: "sola", code: "SOLA", name: "Sola Mobility", kind: "Stock", price: 41.92, change: 2.45, history: [39.8, 40.1, 39.7, 40.3, 40.8, 40.4, 41.2, 41.4, 41.1, 41.6, 41.92], signal: "販売台数", sector: "Mobility" },
-  { id: "lumen", code: "LMN", name: "Lumen Retail", kind: "Stock", price: 58.17, change: 0.38, history: [56.5, 56.8, 57.1, 56.7, 57.3, 57.0, 57.4, 57.8, 57.6, 57.9, 58.17], signal: "消費データ", sector: "Consumer" },
-  { id: "terra", code: "TERR", name: "Terra Materials", kind: "Stock", price: 213.64, change: -1.46, history: [218.9, 217.6, 216.4, 217.2, 215.8, 216.7, 215.1, 214.8, 215.9, 214.2, 213.64], signal: "資源価格", sector: "Materials" },
-  { id: "quanta", code: "QNTA", name: "Quanta Grid", kind: "Stock", price: 36.82, change: 2.84, history: [33.7, 34.0, 33.9, 34.8, 35.2, 34.6, 35.4, 35.9, 36.1, 35.8, 36.82], signal: "送電網", sector: "Utilities" },
-  { id: "atlas", code: "ATL", name: "Atlas Protocol", kind: "Crypto", price: 3.842, change: 3.18, history: [3.44, 3.51, 3.48, 3.59, 3.62, 3.55, 3.68, 3.73, 3.69, 3.77, 3.842], signal: "ネットワーク", sector: "Layer 1" },
-  { id: "nova", code: "NVA", name: "Nova Credit", kind: "Crypto", price: 1.286, change: -1.22, history: [1.34, 1.35, 1.33, 1.32, 1.35, 1.31, 1.30, 1.31, 1.29, 1.30, 1.286], signal: "流動性", sector: "DeFi" },
-  { id: "rift", code: "RIFT", name: "Rift Network", kind: "Crypto", price: 0.746, change: 4.62, history: [0.67, 0.69, 0.68, 0.70, 0.71, 0.70, 0.72, 0.73, 0.72, 0.74, 0.746], signal: "スケーリング", sector: "Layer 2" },
-  { id: "etheris", code: "ETHS", name: "Etheris", kind: "Crypto", price: 18.467, change: -0.31, history: [18.9, 18.8, 18.7, 18.6, 18.8, 18.7, 18.6, 18.5, 18.6, 18.52, 18.467], signal: "ステーキング", sector: "Smart Chain" },
-  { id: "mint", code: "MINT", name: "Mint Ledger", kind: "Crypto", price: 6.214, change: 1.72, history: [5.92, 5.98, 5.94, 6.04, 6.08, 6.02, 6.11, 6.14, 6.12, 6.17, 6.214], signal: "トークン化", sector: "RWA" },
-  { id: "aura", code: "AURA", name: "Aura Swap", kind: "Crypto", price: 0.392, change: -2.09, history: [0.42, 0.41, 0.414, 0.405, 0.41, 0.402, 0.398, 0.403, 0.397, 0.401, 0.392], signal: "取引量", sector: "DEX" },
-];
+function advanceGame(game: GameData): GameData {
+  const tick = game.tick + 1;
+  const stock = { ...game.stock };
+  const unlocked = game.unlockedRegions;
+  const level = game.levels;
+  const on = game.machineOn;
 
-const EVENT_POOL: Omit<MarketEvent, "id" | "age">[] = [
-  { tag: "TECH / POSITIVE", title: "クラウド利用、思ったより伸びそう", copy: "企業のAI利用が予想より広がり、サーバーへの投資も少し早まりそうだ。AIインフラ関連に注目が集まっている。", source: "Pulse Wire", direction: "up", impact: 82, effect: { orca: 0.008, atlas: 0.003 } },
-  { tag: "MACRO / CAUTION", title: "長期金利の上昇で、成長株は少し慎重に", copy: "金利が上がると、将来の成長が期待される銘柄ほど評価がゆれやすくなる。今は少し様子を見たい場面。", source: "Macro Desk", direction: "down", impact: 67, effect: { orca: -0.005, helio: -0.004, nova: -0.003 } },
-  { tag: "ENERGY / POSITIVE", title: "地域の電力網づくり、計画が前進", copy: "送電網を強くする予算の方向性が見え、電力をためる・届ける企業への期待が高まっている。", source: "Sector Brief", direction: "up", impact: 74, effect: { nori: 0.007, sola: 0.002 } },
-  { tag: "CRYPTO / POSITIVE", title: "決済ネットワークが、少し使いやすく", copy: "ネットワークの処理能力が上がり、取引が増える期待が出ている。関連プロトコルに資金が向かいやすい流れ。", source: "Chain Monitor", direction: "up", impact: 88, effect: { atlas: 0.009, nova: 0.005 } },
-  { tag: "HEALTH / POSITIVE", title: "治療研究に、明るい途中経過", copy: "試験データが想定より良く、次の開発ステップへ進みやすくなった。ヘルスケア分野への注目が高まっている。", source: "Clinical Ledger", direction: "up", impact: 76, effect: { helio: 0.008 } },
-  { tag: "MOBILITY / CAUTION", title: "部材の遅れで、生産ペースに注意", copy: "部品の到着が少し遅れ、短期的には納車台数へ影響するかもしれない。次の販売見通しがポイント。", source: "Supply Chain Now", direction: "down", impact: 72, effect: { sola: -0.007 } },
-  { tag: "CRYPTO / CAUTION", title: "短期トレードの整理で、値動きが大きめ", copy: "借りた資金を使う取引の解消が増え、取引が少ない時間帯は価格が動きやすい。いったん落ち着きを待ちたい局面。", source: "Chain Monitor", direction: "down", impact: 63, effect: { atlas: -0.006, nova: -0.008 } },
-  { tag: "FINANCE / POSITIVE", title: "効率よく稼ぐための計画を発表", copy: "手数料の伸ばし方とコストの見直しが示され、金融サービスの利益がよくなる期待が出ている。", source: "Capital Brief", direction: "up", impact: 71, effect: { vector: 0.007, lumen: 0.002 } },
-  { tag: "MATERIALS / CAUTION", title: "資源価格が一服、素材株は様子見", copy: "需要の見通しを見直す動きで、資源価格がやや弱い。素材関連には短期的な売りが出ている。", source: "Commodity Wire", direction: "down", impact: 69, effect: { terra: -0.008 } },
-  { tag: "GRID / POSITIVE", title: "電力をためて届ける新案件が前進", copy: "地域インフラの新しい案件が出てきて、電力網に関わる企業の受注への期待が高まっている。", source: "Sector Brief", direction: "up", impact: 79, effect: { quanta: 0.009, nori: 0.003 } },
-  { tag: "CRYPTO / POSITIVE", title: "ネットワーク更新で、取引がもっと軽く", copy: "処理の速さと手数料の使いやすさが良くなる見込み。関連するネットワークに前向きな空気が広がっている。", source: "Chain Monitor", direction: "up", impact: 84, effect: { rift: 0.011, etheris: 0.004, aura: 0.003 } },
-  { tag: "RWA / POSITIVE", title: "デジタル化した資産の利用が広がる", copy: "現実の資産をデジタルで扱うサービスの利用範囲が広がり、この分野へ資金が入り始めている。", source: "Ledger Review", direction: "up", impact: 73, effect: { mint: 0.009, nova: 0.002 } },
-  { tag: "TECH / CAUTION", title: "企業のIT予算、少しだけ慎重に", copy: "一部の企業が新しいシステム導入の時期を見直している。AI関連は長い目では期待がある一方、短期の注文は少し落ち着きそうだ。", source: "Pulse Wire", direction: "down", impact: 61, effect: { orca: -0.006, rift: -0.002 } },
-  { tag: "TECH / POSITIVE", title: "高速計算の予約が増え、設備投資に追い風", copy: "開発チームからの計算資源の予約が増えている。処理能力を支える企業への期待が、もう一段高まっている。", source: "Compute Desk", direction: "up", impact: 78, effect: { orca: 0.009, etheris: 0.002 } },
-  { tag: "FINANCE / CAUTION", title: "個人向けローンの返済状況を注視", copy: "家計の負担を気にする見方が出てきた。金融サービスの利用は続いているが、貸し出しの伸びは少し慎重に見られている。", source: "Capital Brief", direction: "down", impact: 64, effect: { vector: -0.007, lumen: -0.002 } },
-  { tag: "FINANCE / POSITIVE", title: "スマホ決済の利用者が増加", copy: "日常の支払いでデジタル決済を使う人が増えている。小さな取引の積み重ねが、手数料収入への期待につながっている。", source: "Retail Ledger", direction: "up", impact: 70, effect: { vector: 0.007, lumen: 0.004 } },
-  { tag: "HEALTH / CAUTION", title: "治療研究、追加の確認に時間", copy: "研究結果そのものは大きく崩れていないが、次の確認に少し時間がかかる見通し。短期では期待が落ち着きやすい。", source: "Clinical Ledger", direction: "down", impact: 68, effect: { helio: -0.008 } },
-  { tag: "MOBILITY / POSITIVE", title: "試乗予約が増え、新モデルに関心", copy: "新モデルを実際に試したい人が増えている。今後の販売ペースに前向きな見方が出始めた。", source: "Mobility Now", direction: "up", impact: 75, effect: { sola: 0.009, lumen: 0.002 } },
-  { tag: "CONSUMER / POSITIVE", title: "週末の買い物、予想よりにぎやか", copy: "店舗とアプリの利用がそろって伸びた。生活者向けサービスでは、月末に向けた売上への期待が少し高まっている。", source: "Retail Ledger", direction: "up", impact: 66, effect: { lumen: 0.008, vector: 0.002 } },
-  { tag: "CONSUMER / CAUTION", title: "生活費の上昇で、買い物は選びながら", copy: "必要なものを優先する動きが強まっている。生活者向けサービスは、客数よりも一人あたりの利用額が注目されそうだ。", source: "Consumer Note", direction: "down", impact: 62, effect: { lumen: -0.007, vector: -0.002 } },
-  { tag: "MATERIALS / POSITIVE", title: "建設計画の再開で、素材需要に期待", copy: "止まっていた建設計画が少しずつ動き始めている。素材と電力網に関わる企業へ、受注を期待する買いが入っている。", source: "Industry Paper", direction: "up", impact: 77, effect: { terra: 0.009, quanta: 0.003 } },
-  { tag: "GRID / CAUTION", title: "送電網計画、許可の手続きが長引く", copy: "地域との調整に時間がかかりそうだ。大きな流れは変わらないが、短期の受注見通しは少し後ろへずれる可能性がある。", source: "Sector Brief", direction: "down", impact: 65, effect: { quanta: -0.008, nori: -0.004 } },
-  { tag: "ENERGY / CAUTION", title: "発電コストが上がり、利益を見極め", copy: "燃料と輸送のコストが少し上がっている。電力需要は底堅い一方、利益の伸び方には注意が必要な場面だ。", source: "Energy Meter", direction: "down", impact: 63, effect: { nori: -0.007, terra: -0.002 } },
-  { tag: "LAYER 1 / CAUTION", title: "ネットワークの更新、予定を再調整", copy: "安全確認のため、次の更新は少しゆっくり進めることになった。利用者への影響は小さいが、短期の期待は冷めやすい。", source: "Chain Monitor", direction: "down", impact: 71, effect: { atlas: -0.009, rift: -0.003 } },
-  { tag: "DEFI / POSITIVE", title: "資金を置く人が増え、取引の厚みが回復", copy: "交換サービスに預けられる資金が増え、売買しやすい環境が戻りつつある。DeFi関連に穏やかな追い風。", source: "Ledger Review", direction: "up", impact: 76, effect: { nova: 0.008, aura: 0.007 } },
-  { tag: "LAYER 2 / CAUTION", title: "資産を渡す仕組みを一時点検", copy: "安全確認のため、一部の接続機能を短時間止めている。利用者資産の保護が目的だが、取引量は一時的に減りそうだ。", source: "Chain Monitor", direction: "down", impact: 74, effect: { rift: -0.010, aura: -0.003 } },
-  { tag: "SMART CHAIN / POSITIVE", title: "開発チーム向けの支援枠が拡大", copy: "新しいアプリを作るチームへの資金支援が増えた。ネットワーク上の利用が広がることへの期待が高まっている。", source: "Builder Brief", direction: "up", impact: 72, effect: { etheris: 0.008, rift: 0.004 } },
-  { tag: "RWA / CAUTION", title: "デジタル資産のルールづくりを待つ空気", copy: "使い方を広げるための新しいルールについて、検討に時間がかかりそうだ。長期の可能性は残るが、短期では様子見が増えている。", source: "Policy Watch", direction: "down", impact: 66, effect: { mint: -0.008, nova: -0.003 } },
-  { tag: "DEX / POSITIVE", title: "交換サービスの取引量がじわり回復", copy: "小さな取引が積み重なり、交換サービスの利用が増えている。流動性が戻る期待から、関連トークンに注目が集まった。", source: "Chain Monitor", direction: "up", impact: 70, effect: { aura: 0.009, nova: 0.003 } },
-  { tag: "MACRO / POSITIVE", title: "物価の伸びが落ち着き、成長分野に安心感", copy: "物価上昇が少し落ち着いたという見方が出ている。金利への不安が和らぎ、成長を期待される分野に資金が戻りやすい。", source: "Macro Desk", direction: "up", impact: 80, effect: { orca: 0.006, helio: 0.005, vector: 0.003 } },
-  { tag: "MACRO / CAUTION", title: "海外の通貨変動で、輸入コストに注意", copy: "通貨の動きが大きく、部材や資源を海外から調達する企業ではコストを見直す場面が増えている。", source: "Macro Desk", direction: "down", impact: 59, effect: { sola: -0.004, terra: -0.005, nori: -0.003 } },
-  { tag: "MARKET / NEUTRAL", title: "大型イベント前で、いったん様子見", copy: "注目される発表を前に、積極的な売買は少し減っている。材料が出るまでは、小さな値動きが続きそうだ。", source: "Pulse Wire", direction: "neutral", impact: 38, effect: {} },
-];
+  if (on.supply)
+    stock.steel += 1 + level.supply + (unlocked.includes("sapporo") ? 1 : 0);
+  if (tick % 2 === 0 && on.tire)
+    stock.rubber += 1 + (unlocked.includes("shizuoka") ? 1 : 0);
 
-const STARTING_EVENTS: MarketEvent[] = [
-  { id: "seed-1", tag: "TECH / POSITIVE", title: "クラウド利用、思ったより伸びそう", copy: "企業のAI利用が予想より広がり、サーバーへの投資も少し早まりそうだ。AIインフラ関連に注目が集まっている。", source: "Pulse Wire", direction: "up", impact: 82, effect: { orca: 0.008, atlas: 0.003 }, age: 1 },
-  { id: "seed-2", tag: "MACRO / CAUTION", title: "長期金利の上昇で、成長株は少し慎重に", copy: "金利が上がると、将来の成長が期待される銘柄ほど評価がゆれやすくなる。今は少し様子を見たい場面。", source: "Macro Desk", direction: "down", impact: 67, effect: { orca: -0.005, helio: -0.004 }, age: 4 },
-  { id: "seed-3", tag: "CRYPTO / POSITIVE", title: "決済ネットワークが、少し使いやすく", copy: "ネットワークの処理能力が上がり、取引が増える期待が出ている。関連プロトコルに資金が向かいやすい流れ。", source: "Chain Monitor", direction: "up", impact: 88, effect: { atlas: 0.009, nova: 0.005 }, age: 8 },
-];
+  const pressPeriod = Math.max(2, 5 - level.press);
+  if (on.press && tick % pressPeriod === 0 && stock.steel >= 2) {
+    stock.steel -= 2;
+    stock.chassis += 1 + (unlocked.includes("gunma") ? 1 : 0);
+  }
 
-const REWARDS: Reward[] = [
-  { id: "pulse", name: "Open Signal", rarity: "COMMON", detail: "分析アーカイブの初期シグナル。プロフィールに記録されます。", accent: "#b7c2c9", icon: "signal" },
-  { id: "wire", name: "Wire Reader", rarity: "RARE", detail: "ニュースを読む交易者のための限定アーカイブバッジ。", accent: "#7ed8ff", icon: "news" },
-  { id: "radar", name: "Second Horizon", rarity: "EPIC", detail: "二次的な市場波及を追うための観測レコード。", accent: "#cf9cff", icon: "radar" },
-  { id: "thesis", name: "Thesis 01", rarity: "LEGEND", detail: "仮説を持続させた記録。純粋にコレクション用のレアバッジ。", accent: "#f6c96a", icon: "badge" },
-  { id: "pulse-zero", name: "Pulse Zero", rarity: "MYTHIC", detail: "ニュース、価格、仮説の接点を記した最上位アーカイブ。", accent: "#c9f34a", icon: "badge" },
-  { id: "signal-limited", name: "First Pulse / Limited", rarity: "LIMITED", detail: "MARKET PULSEの最初の価格波形を封じた、季節限定のシグナル・レコード。", accent: "#ff6ee7", icon: "badge" },
-];
+  const enginePeriod = Math.max(2, 6 - level.engine);
+  if (on.engine && tick % enginePeriod === 0 && stock.steel >= 3) {
+    stock.steel -= 3;
+    stock.engines += 1 + (unlocked.includes("hiroshima") ? 1 : 0);
+  }
 
-const RARITY_META: Record<Reward["rarity"], { label: string; rate: string; color: string; border: string; background: string }> = {
-  COMMON: { label: "COMMON", rate: "57.5%", color: "#bdd7ef", border: "#4f9bff55", background: "#4f9bff12" },
-  RARE: { label: "RARE", rate: "32%", color: "#72d3ff", border: "#38bdf855", background: "#38bdf812" },
-  EPIC: { label: "EPIC", rate: "8.5%", color: "#b9a4ff", border: "#9b7dff55", background: "#9b7dff12" },
-  LEGEND: { label: "LEGEND", rate: "1.8%", color: "#ffd178", border: "#f6c96a66", background: "#f6c96a12" },
-  MYTHIC: { label: "MYTHIC", rate: "0.2%", color: "#c9f34a", border: "#c9f34a88", background: "#c9f34a18" },
-  LIMITED: { label: "LIMITED", rate: "0.02%", color: "#ff6ee7", border: "#ff6ee799", background: "#ff6ee720" },
-};
+  const tirePeriod = Math.max(2, 6 - level.tire);
+  if (on.tire && tick % tirePeriod === 0 && stock.rubber >= 2) {
+    stock.rubber -= 2;
+    stock.tireSets += 1;
+  }
 
-const ARCHIVE_EFFECTS: Record<Reward["rarity"], ArchiveEffect> = {
-  COMMON: { key: "credit", label: "RECORD BOOST", description: "取引を記録するたび、Archive Credit を +5 追加で獲得。", creditBonus: 5 },
-  RARE: { key: "news", label: "NEWS LENS", description: "選択中の銘柄に関係するニュースを、短い要点として優先表示。", creditBonus: 0 },
-  EPIC: { key: "range", label: "RANGE SCOPE", description: "チャートの直近レンジを数値化し、値動きの大きさを読みやすくする。", creditBonus: 0 },
-  LEGEND: { key: "brief", label: "THESIS BRIEF", description: "選択中銘柄に効いている理由を、ひとつの短いブリーフとして表示。", creditBonus: 0 },
-  MYTHIC: { key: "bot", label: "BOT LINK", description: "BOTの観察メモと自分の判断を見比べる、最上位の分析リンク。市場価格には影響しません。", creditBonus: 0 },
-  LIMITED: { key: "bot", label: "LIMITED FLOW", description: "BOT注文とニュースの合流点を強調する、期間限定の分析シグナル。アーカイブ自体は市場に影響しません。", creditBonus: 0 },
-};
+  const assemblyPeriod = Math.max(2, 7 - level.assembly);
+  if (
+    on.assembly &&
+    tick % assemblyPeriod === 0 &&
+    stock.chassis > 0 &&
+    stock.engines > 0 &&
+    stock.tireSets > 0
+  ) {
+    stock.chassis -= 1;
+    stock.engines -= 1;
+    stock.tireSets -= 1;
+    stock.cars += 1;
+    return { ...game, tick, stock, lifetimeCars: game.lifetimeCars + 1 };
+  }
 
-const PACK_SERIES: Record<GachaPack["id"], { title: string; subtitle: string }> = {
-  signal: { title: "OPEN SIGNAL / 01", subtitle: "市場を読み始めるための基本シリーズ" },
-  sector: { title: "SECTOR FILE / 02", subtitle: "業界のつながりを集める限定シリーズ" },
-  style: { title: "PULSE ID / 03", subtitle: "自分の判断スタイルを残す限定シリーズ" },
-  macro: { title: "MACRO FLASH / 04", subtitle: "世界の流れを短く読む限定シリーズ" },
-  chart: { title: "CHART LAB / 05", subtitle: "値動きの形を観測する限定シリーズ" },
-};
-
-const COMPANY_PROFILES: Record<string, AssetProfile> = {
-  orca: { oneLine: "企業のAI活用を支える、計算基盤の設計者。", archetype: "AI INFRA", audience: "大企業・開発者", sensitivity: "HIGH", risk: "HIGH", strengths: ["推論需要", "クラウド投資", "開発者採用"], watch: "設備投資の鈍化" },
-  vector: { oneLine: "決済・資産管理の流れを支える、デジタル金融プレイヤー。", archetype: "FINANCE", audience: "事業者・個人", sensitivity: "MID", risk: "MID", strengths: ["金利環境", "手数料収入", "資本効率"], watch: "信用コストの上昇" },
-  nori: { oneLine: "発電と貯蔵をつなぎ、次世代の電力網を支える。", archetype: "ENERGY", audience: "電力会社・自治体", sensitivity: "MID", risk: "MID", strengths: ["送電網投資", "電力需要", "政策支援"], watch: "資源コストの上昇" },
-  helio: { oneLine: "治療の選択肢を増やす、研究開発型のヘルスケア企業。", archetype: "HEALTH", audience: "医療機関・患者", sensitivity: "HIGH", risk: "HIGH", strengths: ["治験進捗", "承認イベント", "研究成果"], watch: "開発スケジュールの遅延" },
-  sola: { oneLine: "移動をもっと軽くする、都市型モビリティの新世代。", archetype: "MOBILITY", audience: "都市生活者", sensitivity: "HIGH", risk: "MID", strengths: ["販売台数", "供給網", "航続性能"], watch: "部材調達の混乱" },
-  lumen: { oneLine: "日々の買い物データから、新しい消費体験を作る。", archetype: "CONSUMER", audience: "若年層・生活者", sensitivity: "MID", risk: "MID", strengths: ["消費データ", "会員数", "店舗拡大"], watch: "景気減速" },
-  terra: { oneLine: "未来の建設と製造を支える、素材のアップデーター。", archetype: "MATERIALS", audience: "製造業・建設業", sensitivity: "MID", risk: "MID", strengths: ["資源価格", "在庫水準", "設備需要"], watch: "商品市況の反落" },
-  quanta: { oneLine: "電気を途切れさせない、スマートグリッドの挑戦者。", archetype: "UTILITY", audience: "自治体・事業者", sensitivity: "LOW", risk: "LOW", strengths: ["インフラ案件", "長期契約", "送電網更新"], watch: "入札の遅延" },
-  atlas: { oneLine: "速く、誰でも使えるネットワークを目指す基盤プロトコル。", archetype: "LAYER 1", audience: "開発者・コミュニティ", sensitivity: "HIGH", risk: "HIGH", strengths: ["利用者数", "ネットワーク更新", "開発者活動"], watch: "取引量の低下" },
-  nova: { oneLine: "オンチェーン上の資金の流れをなめらかにする。", archetype: "DEFI", audience: "トレーダー・開発者", sensitivity: "HIGH", risk: "HIGH", strengths: ["流動性", "金利水準", "プロトコル利用"], watch: "清算の増加" },
-  rift: { oneLine: "大きなネットワークをもっと軽くする、拡張レイヤー。", archetype: "LAYER 2", audience: "開発者・ゲーマー", sensitivity: "HIGH", risk: "HIGH", strengths: ["処理速度", "手数料", "アプリ数"], watch: "競合の台頭" },
-  etheris: { oneLine: "アプリと資産をつなぐ、プログラム可能なチェーン。", archetype: "SMART CHAIN", audience: "開発者・クリエイター", sensitivity: "MID", risk: "HIGH", strengths: ["ステーキング", "アプリ利用", "アップグレード"], watch: "ネットワーク混雑" },
-  mint: { oneLine: "リアルな価値を、デジタルに持ち運べる形へ。", archetype: "RWA", audience: "投資家・事業者", sensitivity: "MID", risk: "MID", strengths: ["発行額", "提携", "利用領域"], watch: "規制環境の変化" },
-  aura: { oneLine: "交換をもっと身近にする、コミュニティ主導のDEX。", archetype: "DEX", audience: "トレーダー・コミュニティ", sensitivity: "HIGH", risk: "HIGH", strengths: ["取引量", "流動性", "新規ペア"], watch: "短期資金の流出" },
-};
-
-const GACHA_PACKS: GachaPack[] = [
-  { id: "signal", label: "SIGNAL DROP", kicker: "EVERYDAY", cost: 100, description: "ニュースを読むための、基本コレクション。", accent: "#f6c96a", icon: "signal", rewards: REWARDS },
-  { id: "sector", label: "SECTOR FILE", kicker: "THEME", cost: 150, description: "業界ごとの推しポイントを集めるファイル。", accent: "#7ed8ff", icon: "news", rewards: [
-    { id: "grid", name: "Grid Runner", rarity: "COMMON", detail: "インフラ領域を知るためのセクターノート。", accent: "#7ed8ff", icon: "news" },
-    { id: "health", name: "Health Scout", rarity: "RARE", detail: "研究進捗を読むためのファイルバッジ。", accent: "#7ed8ff", icon: "radar" },
-    { id: "chain", name: "Chain Atlas", rarity: "EPIC", detail: "ネットワーク地図を集めたスペシャル記録。", accent: "#7ed8ff", icon: "badge" },
-    { id: "sector-legend", name: "Sector Zero", rarity: "LEGEND", detail: "業界のつながりを見通す、限定アーカイブ。", accent: "#7ed8ff", icon: "badge" },
-    { id: "sector-mythic", name: "Sector Singularity", rarity: "MYTHIC", detail: "業界をまたぐ因果を記録した、最上位セクターファイル。", accent: "#c9f34a", icon: "badge" },
-    { id: "sector-limited", name: "Sector Crown / Limited", rarity: "LIMITED", detail: "複数のテーマが交差した瞬間を残す、限定セクター・ファイル。", accent: "#ff6ee7", icon: "badge" },
-  ] },
-  { id: "style", label: "PULSE ID", kicker: "STYLE", cost: 220, description: "自分のトレードスタイルを彩るプロフィール記録。", accent: "#cf9cff", icon: "badge", rewards: [
-    { id: "reader", name: "News Reader", rarity: "COMMON", detail: "ニュースを読むプレイヤーのIDカード。", accent: "#cf9cff", icon: "news" },
-    { id: "calm", name: "Calm Operator", rarity: "RARE", detail: "落ち着いた判断を記録するスタイルバッジ。", accent: "#cf9cff", icon: "signal" },
-    { id: "drift", name: "Trend Drifter", rarity: "EPIC", detail: "流れを追う感覚を映したプロフィール記録。", accent: "#cf9cff", icon: "radar" },
-    { id: "midnight", name: "Midnight Thesis", rarity: "LEGEND", detail: "自分の仮説を持つ人のための限定ID。", accent: "#cf9cff", icon: "badge" },
-    { id: "style-mythic", name: "Signal Persona", rarity: "MYTHIC", detail: "仮説と判断の軸を結んだ、最上位プロフィール記録。", accent: "#c9f34a", icon: "badge" },
-    { id: "style-limited", name: "Afterimage / Limited", rarity: "LIMITED", detail: "判断の痕跡をネオンに刻む、期間限定のプロフィール記録。", accent: "#ff6ee7", icon: "badge" },
-  ] },
-  { id: "macro", label: "MACRO FLASH", kicker: "WORLD", cost: 180, description: "世界の流れを短く読む、マクロ視点のアーカイブ。", accent: "#7ab8ff", icon: "signal", rewards: [
-    { id: "yield-note", name: "Yield Note", rarity: "COMMON", detail: "金利の変化を記録する、短いマクロノート。", accent: "#7ab8ff", icon: "signal" },
-    { id: "risk-map", name: "Risk Map", rarity: "RARE", detail: "資金の向かう先を整理した、リスクオンの地図。", accent: "#7ab8ff", icon: "news" },
-    { id: "global-tape", name: "Global Tape", rarity: "EPIC", detail: "国境をまたぐ流れを追う、編集デスクのテープ。", accent: "#7ab8ff", icon: "radar" },
-    { id: "macro-zero", name: "Macro Zero", rarity: "LEGEND", detail: "市場全体の前提を読むための、限定マクロ記録。", accent: "#7ab8ff", icon: "badge" },
-    { id: "macro-mythic", name: "Worldline", rarity: "MYTHIC", detail: "世界の変化と市場の接点を記した、最上位マクロ記録。", accent: "#c9f34a", icon: "badge" },
-    { id: "macro-limited", name: "Event Horizon / Limited", rarity: "LIMITED", detail: "世界の材料が一点へ収束する瞬間を封じた、限定マクロ記録。", accent: "#ff6ee7", icon: "badge" },
-  ] },
-  { id: "chart", label: "CHART LAB", kicker: "TACTIC", cost: 200, description: "価格の形と動きを読む、チャート観測のコレクション。", accent: "#5ee8b0", icon: "radar", rewards: [
-    { id: "candle-note", name: "Candle Note", rarity: "COMMON", detail: "ローソク足の形を記録する、観測メモ。", accent: "#5ee8b0", icon: "signal" },
-    { id: "volume-scan", name: "Volume Scan", rarity: "RARE", detail: "出来高の変化を追う、分析スキャン。", accent: "#5ee8b0", icon: "news" },
-    { id: "breakout-frame", name: "Breakout Frame", rarity: "EPIC", detail: "価格が動き出す場面を記した、フレーム記録。", accent: "#5ee8b0", icon: "radar" },
-    { id: "tape-master", name: "Tape Master", rarity: "LEGEND", detail: "値動きのリズムを見通す、限定チャートレコード。", accent: "#5ee8b0", icon: "badge" },
-    { id: "chart-mythic", name: "Price Aurora", rarity: "MYTHIC", detail: "値動きと因果が重なる瞬間を記した、最上位チャート記録。", accent: "#c9f34a", icon: "badge" },
-    { id: "chart-limited", name: "Zero Print / Limited", rarity: "LIMITED", detail: "市場の切り替わりを一瞬で記録した、限定チャート・プリント。", accent: "#ff6ee7", icon: "badge" },
-  ] },
-];
-
-const formatMoney = (value: number, precision = 2) =>
-  new Intl.NumberFormat("ja-JP", { style: "currency", currency: "USD", minimumFractionDigits: precision, maximumFractionDigits: precision }).format(value);
-
-const formatPrice = (asset: Asset) => formatMoney(asset.price, asset.kind === "Crypto" ? 3 : 2);
-
-const TIMEFRAMES: Timeframe[] = ["1M", "5M", "15M", "1H", "1D"];
-
-function createCandles(asset: Asset, timeframe: Timeframe): Candle[] {
-  const count = timeframe === "1M" ? 44 : timeframe === "5M" ? 38 : timeframe === "15M" ? 34 : timeframe === "1H" ? 30 : 26;
-  const scale = asset.kind === "Crypto" ? 0.024 : 0.012;
-  const codeSeed = asset.id.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  const openingPrice = asset.price / (1 + asset.change / 100);
-  let previousClose = openingPrice * (0.978 + (codeSeed % 8) / 1000);
-  const unit = timeframe === "1M" ? "m" : timeframe === "5M" ? "m" : timeframe === "15M" ? "m" : timeframe === "1H" ? "h" : "d";
-  const interval = timeframe === "1M" ? 1 : timeframe === "5M" ? 5 : timeframe === "15M" ? 15 : timeframe === "1H" ? 1 : 1;
-
-  return Array.from({ length: count }, (_, index) => {
-    const open = previousClose;
-    const momentum = Math.sin((index + codeSeed) * 1.39) * scale * 0.85 + Math.cos((index + codeSeed) * 0.58) * scale * 0.45;
-    const correction = (asset.price - previousClose) / asset.price / Math.max(3, count - index);
-    const close = index === count - 1 ? asset.price : Math.max(asset.kind === "Crypto" ? 0.05 : 2, open * (1 + momentum + correction));
-    const wick = Math.abs(Math.sin((index + codeSeed) * 2.17)) * scale * 0.9 + scale * 0.34;
-    const high = Math.max(open, close) * (1 + wick);
-    const low = Math.min(open, close) * (1 - wick * 0.9);
-    const volume = Math.round((asset.kind === "Crypto" ? 680000 : 230000) * (0.64 + Math.abs(momentum) * 85 + (index % 5) * 0.08));
-    previousClose = close;
-    const clock = timeframe === "1D" ? `D-${count - index - 1}` : `${String(9 + Math.floor((index * interval) / 60)).padStart(2, "0")}:${String((30 + index * interval) % 60).padStart(2, "0")}`;
-    return { time: index === count - 1 ? "NOW" : clock, open, high, low, close, volume };
-  });
+  return { ...game, tick, stock };
 }
 
-function deriveBotActions(events: MarketEvent[], assets: Asset[]): BotTrader[] {
-  return BOT_ROSTER.map((bot, index) => {
-    const event = events[index % events.length];
-    const affectedIds = Object.keys(event?.effect ?? {});
-    const assetId = affectedIds[index % Math.max(1, affectedIds.length)] ?? assets[index % assets.length]?.id ?? "orca";
-    const side: BotAction["side"] = event?.direction === "up" ? "ADD" : event?.direction === "down" ? "TRIM" : "WATCH";
-    const confidence = Math.min(96, Math.max(48, (event?.impact ?? 52) + index * 3));
-    const roleWeight = [1.12, 0.86, 1.04, 0.72][index] ?? 1;
-    const size = (0.00055 + confidence * 0.000016) * roleWeight;
-    const impact = side === "ADD" ? size : side === "TRIM" ? -size : 0;
-    return { ...bot, action: { assetId, side, reason: event?.title ?? "材料を観察中", confidence, impact } };
-  });
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat("ja-JP").format(Math.floor(value));
 }
 
-function DirectionIcon({ direction, size = 14 }: { direction: MarketEvent["direction"]; size?: number }) {
-  return direction === "up" ? <ArrowUpRight size={size} /> : direction === "down" ? <ArrowDownRight size={size} /> : <Minus size={size} />;
+function formatYen(value: number): string {
+  return `¥${formatNumber(value)}`;
 }
 
-function RewardIcon({ type }: { type: Reward["icon"] }) {
-  const iconProps = { size: 27, strokeWidth: 1.6 };
-  if (type === "news") return <Newspaper {...iconProps} />;
-  if (type === "radar") return <Crosshair {...iconProps} />;
-  if (type === "badge") return <ShieldCheck {...iconProps} />;
-  return <Activity {...iconProps} />;
+function formatSimulationClock(tick: number): string {
+  const minutes = (19 * 60 + 42 + Math.floor(tick / 10)) % (24 * 60);
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }
 
-export default function Home() {
-  const [initialSave] = useState<SavedGame | null>(() => readSavedGame());
-  const [assets, setAssets] = useState<Asset[]>(() => initialSave?.assets ?? INITIAL_ASSETS);
-  const [events, setEvents] = useState<MarketEvent[]>(STARTING_EVENTS);
-  const [selectedId, setSelectedId] = useState(() => initialSave?.selectedId ?? "orca");
-  const [cash, setCash] = useState(() => initialSave?.cash ?? 100000);
-  const [holdings, setHoldings] = useState<Record<string, Holding>>(() => initialSave?.holdings ?? {});
-  const [tradeQuantity, setTradeQuantity] = useState(10);
-  const [tab, setTab] = useState<"all" | AssetKind>(() => initialSave?.tab ?? "all");
-  const [credits, setCredits] = useState(() => initialSave?.credits ?? 350);
-  const [gachaOpen, setGachaOpen] = useState(false);
-  const [gachaResult, setGachaResult] = useState<Reward | null>(null);
-  const [archive, setArchive] = useState<Reward[]>(() => initialSave?.archive ?? []);
-  const [tick, setTick] = useState(1);
-  const [timeframe, setTimeframe] = useState<Timeframe>(() => initialSave?.timeframe ?? "5M");
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [activePack, setActivePack] = useState<GachaPack | null>(null);
-  const [activeSection, setActiveSection] = useState<NavigationSection>("markets");
-  const [archiveFilter, setArchiveFilter] = useState<"ALL" | Reward["rarity"]>("ALL");
-  const [chartCandles, setChartCandles] = useState<Candle[]>(() => createCandles(INITIAL_ASSETS[0], "5M"));
-  const [activeArchiveId, setActiveArchiveId] = useState<string | null>(() => initialSave?.activeArchiveId ?? null);
-  const [isOpening, setIsOpening] = useState(false);
-  const [openingPack, setOpeningPack] = useState<GachaPack | null>(null);
-  const [playerName, setPlayerName] = useState("PULSE PLAYER");
-  const [roomCode, setRoomCode] = useState("PULSE-01");
-  const [roomStatus, setRoomStatus] = useState<RoomStatus>("offline");
-  const [roomParticipants, setRoomParticipants] = useState<RoomParticipant[]>([]);
-  const [roomActivity, setRoomActivity] = useState<RoomActivity[]>([]);
-  const [savedAt, setSavedAt] = useState<number | null>(() => initialSave?.savedAt ?? null);
-  const [xp, setXp] = useState(() => initialSave?.xp ?? 0);
-  const [questProgress, setQuestProgress] = useState<QuestProgress>(() => initialSave?.questProgress ?? { news: 0, trade: 0, archive: 0 });
-  const [tutorialStep, setTutorialStep] = useState(() => initialSave?.tutorialStep ?? 0);
-  const [levelUp, setLevelUp] = useState<number | null>(null);
-  const [botTrust, setBotTrust] = useState<Record<string, number>>(() => initialSave?.botTrust ?? {});
-  const [archiveShards, setArchiveShards] = useState(() => initialSave?.archiveShards ?? 0);
-  const [packStreak, setPackStreak] = useState<Partial<Record<GachaPack["id"], number>>>(() => initialSave?.packStreak ?? {});
-  const [botFeed, setBotFeed] = useState<BotTrader[]>(() => deriveBotActions(STARTING_EVENTS, INITIAL_ASSETS));
-  const socketRef = useRef<WebSocket | null>(null);
-  const levelRef = useRef(1);
+function formatCountdown(tick: number): string {
+  const seconds = Math.max(0, 8 * 60 * 60 + 42 * 60 + 16 - tick);
+  return [
+    Math.floor(seconds / 3600),
+    Math.floor((seconds % 3600) / 60),
+    seconds % 60,
+  ]
+    .map(value => String(value).padStart(2, "0"))
+    .join(":");
+}
 
-  const selected = assets.find((asset) => asset.id === selectedId) ?? assets[0];
-  const filteredAssets = tab === "all" ? assets : assets.filter((asset) => asset.kind === tab);
-  const marketValue = useMemo(
-    () => Object.entries(holdings).reduce((total, [id, holding]) => total + (assets.find((asset) => asset.id === id)?.price ?? 0) * holding.quantity, 0),
-    [assets, holdings],
+function machineUpgradeCost(game: GameData, id: MachineId): number {
+  const level = game.levels[id];
+  const researchDiscount = game.unlockedRegions.includes("osaka") ? 0.85 : 1;
+  return Math.round(
+    BASE_UPGRADE_COSTS[id] * Math.pow(level, 1.34) * researchDiscount
   );
-  const positionPnL = useMemo(
-    () => Object.entries(holdings).reduce((total, [id, holding]) => total + ((assets.find((asset) => asset.id === id)?.price ?? 0) - holding.avgCost) * holding.quantity, 0),
-    [assets, holdings],
+}
+
+function vehicleValue(game: GameData, model: VehicleModel): number {
+  let value = model.payout + game.levels.dispatch * 12_000;
+  if (game.unlockedRegions.includes("tokyo")) value += 15_000;
+  if (game.unlockedRegions.includes("sendai")) value += 18_000;
+  if (game.unlockedRegions.includes("fukuoka"))
+    value = Math.round(value * 1.15);
+  return value;
+}
+
+function periodFor(game: GameData, id: MachineId): number {
+  if (id === "press") return Math.max(2, 5 - game.levels.press);
+  if (id === "engine" || id === "tire") return Math.max(2, 6 - game.levels[id]);
+  if (id === "assembly") return Math.max(2, 7 - game.levels.assembly);
+  if (id === "dispatch") return 4;
+  return 1;
+}
+
+function JapanMap({
+  game,
+  selectedId,
+  onSelect,
+}: {
+  game: GameData;
+  selectedId: string;
+  onSelect: (id: string) => void;
+}) {
+  const [compactMap, setCompactMap] = useState(
+    () => typeof window !== "undefined" && window.innerWidth <= 980
   );
-  const equity = cash + marketValue;
-  const positions = useMemo(() => Object.entries(holdings).filter(([, holding]) => holding.quantity > 0).map(([id, holding]) => {
-    const asset = assets.find((item) => item.id === id);
-    const value = (asset?.price ?? 0) * holding.quantity;
-    return { asset, ...holding, value, pnl: value - holding.avgCost * holding.quantity };
-  }).filter((position) => position.asset), [assets, holdings]);
-  const activeCatalysts = useMemo(() => events.filter((event) => event.effect[selected.id] !== undefined).slice(0, 3), [events, selected.id]);
-  const selectedNewsImpact = useMemo(() => activeCatalysts.reduce((sum, event) => sum + (event.effect[selected.id] ?? 0) * Math.max(0.18, 1 - event.age * 0.11), 0), [activeCatalysts, selected.id]);
-  const selectedBotImpact = useMemo(() => botFeed.filter((bot) => bot.action.assetId === selected.id).reduce((sum, bot) => sum + bot.action.impact, 0), [botFeed, selected.id]);
-  const selectedBotOrders = useMemo(() => botFeed.filter((bot) => bot.action.assetId === selected.id), [botFeed, selected.id]);
-  const selectedProfile = COMPANY_PROFILES[selected.id];
-  const visibleArchive = archiveFilter === "ALL" ? archive : archive.filter((reward) => reward.rarity === archiveFilter);
-  const activeArchive = archive.find((reward) => reward.id === activeArchiveId) ?? null;
-  const activeEffect = activeArchive ? ARCHIVE_EFFECTS[activeArchive.rarity] : null;
-  const seriesProgress = useMemo<SeriesProgress[]>(() => GACHA_PACKS.map((pack) => {
-    const ids = new Set(pack.rewards.map((reward) => reward.id));
-    const owned = new Set(archive.filter((reward) => ids.has(reward.id)).map((reward) => reward.id)).size;
-    const info = PACK_SERIES[pack.id];
-    return { pack, title: info.title, subtitle: info.subtitle, owned, total: pack.rewards.length, complete: owned === pack.rewards.length };
-  }), [archive]);
-  const level = Math.floor(Math.sqrt(xp / 100)) + 1;
-  const currentLevelFloor = (level - 1) ** 2 * 100;
-  const nextLevelXp = level ** 2 * 100;
-  const levelProgress = ((xp - currentLevelFloor) / Math.max(1, nextLevelXp - currentLevelFloor)) * 100;
-  const completeQuestCount = QUESTS.filter((quest) => questProgress[quest.key] >= quest.goal).length;
-
   useEffect(() => {
-    if (!profileOpen) return;
-    const closeWithEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setProfileOpen(false);
-    };
-    window.addEventListener("keydown", closeWithEscape);
-    return () => window.removeEventListener("keydown", closeWithEscape);
-  }, [profileOpen]);
-
-  useEffect(() => {
-    setChartCandles(createCandles(selected, timeframe));
-  }, [selectedId, timeframe]);
-
-  useEffect(() => {
-    setBotFeed(deriveBotActions(events, assets));
-  }, [events, assets]);
-
-  useEffect(() => {
-    if (level > levelRef.current) {
-      setLevelUp(level);
-      const timer = window.setTimeout(() => setLevelUp(null), 2400);
-      levelRef.current = level;
-      return () => window.clearTimeout(timer);
-    }
-    levelRef.current = level;
-  }, [level]);
-
-  const createSaveSnapshot = (): SavedGame => ({ version: 3, savedAt: Date.now(), assets, cash, holdings, credits, archive, activeArchiveId, selectedId, tab, timeframe, xp, questProgress, tutorialStep, botTrust, archiveShards, packStreak });
-
-  const saveNow = (showToast = false) => {
-    try {
-      const snapshot = createSaveSnapshot();
-      window.localStorage.setItem(SAVE_KEY, JSON.stringify(snapshot));
-      setSavedAt(snapshot.savedAt);
-      if (showToast) toast.success("ゲームを保存しました", { description: "このブラウザで続きから遊べます。" });
-    } catch {
-      if (showToast) toast.error("保存できませんでした", { description: "ブラウザの保存容量を確認してください。" });
-    }
-  };
-
-  const resetSave = () => {
-    if (!window.confirm("この端末のセーブデータを消して、最初から始めますか？")) return;
-    window.localStorage.removeItem(SAVE_KEY);
-    window.location.reload();
-  };
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => saveNow(false), 450);
-    return () => window.clearTimeout(timer);
-  }, [assets, cash, holdings, credits, archive, activeArchiveId, selectedId, tab, timeframe, xp, questProgress, tutorialStep, botTrust, archiveShards, packStreak]);
-
-  useEffect(() => () => socketRef.current?.close(), []);
-
-  useEffect(() => {
-    if (gachaOpen || !gachaResult) return;
-    const timer = window.setTimeout(() => document.getElementById("archive-vault")?.scrollIntoView({ behavior: "smooth", block: "start" }), 180);
-    return () => window.clearTimeout(timer);
-  }, [gachaOpen, gachaResult]);
-
-  useEffect(() => {
-    if (import.meta.env.PROD || new URLSearchParams(window.location.search).get("demo") !== "limited") return;
-    const reward = GACHA_PACKS.flatMap((pack) => pack.rewards).find((entry) => entry.rarity === "LIMITED");
-    if (!reward) return;
-    setOpeningPack(GACHA_PACKS[0]);
-    setGachaResult(reward);
-    setIsOpening(true);
-    const timer = window.setTimeout(() => setIsOpening(false), 8000);
-    return () => window.clearTimeout(timer);
+    const media = window.matchMedia("(max-width: 980px)");
+    const update = () => setCompactMap(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
   }, []);
+  const activeCount = game.unlockedRegions.length;
+  const route =
+    "M278 388 C306 371 326 362 341 356 C359 346 374 342 391 342 C405 333 415 326 426 322 C441 314 450 308 459 304 C475 296 488 289 500 284 C511 269 518 263 523 264 C535 246 547 224 555 208 C573 177 601 131 650 78";
+  const activeRoute =
+    "M459 304 C446 310 435 317 426 322 C450 306 478 294 500 284 C508 276 517 269 523 264";
 
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      const botOrders = deriveBotActions(events, assets);
-      setBotFeed(botOrders);
-      setAssets((current) =>
-        current.map((asset) => {
-          const weightedEffect = events.reduce((sum, event) => sum + (event.effect[asset.id] ?? 0) * Math.max(0.18, 1 - event.age * 0.11), 0);
-          const botImpact = botOrders.filter((bot) => bot.action.assetId === asset.id).reduce((sum, bot) => sum + bot.action.impact, 0);
-          const microMove = (Math.random() - 0.5) * (asset.kind === "Crypto" ? 0.028 : 0.014);
-          const move = weightedEffect * 0.76 + botImpact + microMove;
-          const nextPrice = Math.max(asset.kind === "Crypto" ? 0.08 : 5, asset.price * (1 + move));
-          const opening = asset.history[0];
-          return { ...asset, price: nextPrice, change: ((nextPrice - opening) / opening) * 100, history: [...asset.history.slice(-23), nextPrice] };
-        }),
-      );
-      setEvents((current) => {
-        const template = EVENT_POOL[Math.floor(Math.random() * EVENT_POOL.length)];
-        const nextEvent: MarketEvent = { ...template, id: `event-${Date.now()}`, age: 0 };
-        return [nextEvent, ...current.map((event) => ({ ...event, age: event.age + 1 }))].slice(0, 5);
-      });
-      setTick((value) => value + 1);
-    }, 5000);
-    return () => window.clearInterval(timer);
-  }, [events, assets]);
+  return (
+    <section className="panel map-panel">
+      <div className="panel-heading map-heading">
+        <div>
+          <div className="eyebrow">JAPAN / FIELD NETWORK</div>
+          <h2>全国拠点マップ</h2>
+        </div>
+        <div className="map-heading-meta">
+          <span className="live-pill">
+            <i /> ROUTES LIVE
+          </span>
+          <span className="active-count">
+            {String(activeCount).padStart(2, "0")} / {REGIONS.length} ZONES
+          </span>
+        </div>
+      </div>
 
-  useEffect(() => {
-    if (tick === 1) return;
-    setChartCandles((current) => {
-      const previous = current.at(-1);
-      if (!previous) return current;
-      const nextClose = selected.price;
-      const volatility = selected.kind === "Crypto" ? 0.008 : 0.004;
-      const excursion = Math.max(Math.abs(nextClose - previous.close), nextClose * volatility * 0.55);
-      const completed = { ...previous, time: timeframe === "1D" ? `D-${tick}` : `${String(9 + Math.floor(tick / 12)).padStart(2, "0")}:${String((tick * 5) % 60).padStart(2, "0")}` };
-      const next: Candle = {
-        time: "NOW",
-        open: previous.close,
-        high: Math.max(previous.close, nextClose) + excursion * (0.35 + Math.random() * 0.35),
-        low: Math.max(selected.kind === "Crypto" ? 0.05 : 2, Math.min(previous.close, nextClose) - excursion * (0.35 + Math.random() * 0.35)),
-        close: nextClose,
-        volume: Math.round(previous.volume * (0.78 + Math.random() * 0.52)),
-      };
-      return [...current.slice(1, -1), completed, next];
-    });
-  }, [tick, selected.price, selected.kind, timeframe]);
+      <div className="map-canvas">
+        <div className="map-grid-glow" />
+        <div className="map-map-stamp">
+          <span>JP</span>
+          <small>
+            日本列島
+            <br />
+            MOTOR GRID
+          </small>
+        </div>
+        <div className="map-time-chip">
+          <Radio size={11} /> LIVE LOGISTICS{" "}
+          <b>{formatSimulationClock(game.tick)} JST</b>
+        </div>
+        <svg
+          viewBox={compactMap ? "220 35 515 420" : "0 0 820 490"}
+          role="img"
+          aria-label="日本の工場・輸送拠点マップ"
+        >
+          <defs>
+            <pattern
+              id="map-grid"
+              width="34"
+              height="34"
+              patternUnits="userSpaceOnUse"
+            >
+              <path
+                d="M 34 0 L 0 0 0 34"
+                fill="none"
+                stroke="rgba(179,194,147,.08)"
+                strokeWidth=".7"
+              />
+              <circle cx="0" cy="0" r="1" fill="rgba(211,226,165,.18)" />
+            </pattern>
+            <linearGradient id="land-fill" x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0" stopColor="#52614b" />
+              <stop offset="1" stopColor="#35463a" />
+            </linearGradient>
+            <linearGradient id="route-fill" x1="0" x2="1">
+              <stop offset="0" stopColor="#d9e992" stopOpacity=".25" />
+              <stop offset=".45" stopColor="#d9e992" stopOpacity=".9" />
+              <stop offset="1" stopColor="#f4a081" stopOpacity=".42" />
+            </linearGradient>
+            <filter
+              id="node-glow"
+              x="-200%"
+              y="-200%"
+              width="400%"
+              height="400%"
+            >
+              <feGaussianBlur stdDeviation="4" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+          <rect width="820" height="490" fill="url(#map-grid)" />
+          <g className="map-contours" fill="none">
+            <ellipse cx="503" cy="284" rx="86" ry="58" />
+            <ellipse cx="503" cy="284" rx="123" ry="88" />
+            <ellipse cx="503" cy="284" rx="165" ry="119" />
+            <path d="M89 106 C196 69 245 98 330 75 S493 31 748 62" />
+            <path d="M59 429 C184 390 217 437 325 420 S528 398 765 437" />
+          </g>
+          <text className="sea-label" x="695" y="235">
+            PACIFIC OCEAN
+          </text>
+          <text className="sea-label sea-label-west" x="164" y="281">
+            SEA OF JAPAN
+          </text>
+          <g className="islands">
+            <path
+              className="island"
+              d="M620 62 C632 49 648 42 665 48 L687 59 L700 76 L691 91 L680 102 L659 100 L645 91 L627 98 L614 84 L612 73 Z"
+            />
+            <path
+              className="island"
+              d="M596 116 C608 120 615 131 611 143 C607 154 596 162 585 173 C573 184 563 198 552 210 C543 220 537 233 525 245 C516 255 510 267 502 281 C495 294 486 303 478 315 C470 327 466 340 455 349 C445 359 434 367 419 372 C403 377 390 373 378 367 C365 361 353 355 341 357 C329 359 317 358 304 353 C292 347 283 339 277 328 C271 318 274 307 284 297 C296 287 307 278 315 265 C322 252 331 241 342 230 C354 219 361 205 375 197 C389 190 400 178 412 169 C424 160 440 155 454 147 C468 140 482 135 496 126 C508 117 523 117 537 115 C553 113 565 112 579 114 Z"
+            />
+            <path
+              className="island"
+              d="M284 357 C295 361 300 372 295 384 L287 397 L283 412 L270 423 L255 418 L248 403 L252 389 L260 377 L270 365 Z"
+            />
+            <path
+              className="island"
+              d="M324 381 C337 375 355 375 369 383 L380 393 L366 401 L348 405 L331 400 L320 392 Z"
+            />
+            <path
+              className="island island-small"
+              d="M172 457 C180 451 190 452 196 458 L191 464 L178 466 Z"
+            />
+            <path
+              className="island island-small"
+              d="M210 446 C216 441 222 443 225 448 L219 452 L212 452 Z"
+            />
+            <path
+              className="island island-small"
+              d="M234 437 C239 432 245 434 247 439 L242 443 L236 442 Z"
+            />
+            <path
+              className="island-detail"
+              d="M595 128 C581 145 569 160 550 177 C539 189 530 205 518 218 C507 233 497 248 487 262 C478 275 467 289 458 303 C447 319 437 332 421 344 C406 355 389 358 375 350"
+            />
+            <path
+              className="island-detail"
+              d="M594 144 C578 159 567 171 555 188 C540 205 529 220 517 234 C505 248 497 263 488 276"
+            />
+          </g>
+          <path className="route-muted" d={route} />
+          <path className="route-halo" d={activeRoute} />
+          <path className="route-active" d={activeRoute} />
+          <path className="route-flow" d={activeRoute} />
+          <g className="port-dash">
+            <path d="M486 302 C472 315 465 322 458 329" />
+          </g>
+          <g className="map-label-region">
+            <text x="340" y="290">
+              HONSHU
+            </text>
+            <text x="252" y="430">
+              KYUSHU
+            </text>
+            <text x="640" y="112">
+              HOKKAIDO
+            </text>
+          </g>
+          {REGIONS.map(region => {
+            const active = game.unlockedRegions.includes(region.id);
+            const selected = selectedId === region.id;
+            return (
+              <g
+                key={region.id}
+                className={`map-marker ${active ? "is-open" : "is-locked"} ${selected ? "is-selected" : ""}`}
+                role="button"
+                tabIndex={0}
+                aria-label={`${region.city}, ${region.prefecture}${active ? ", 稼働中" : ", 未開設"}`}
+                onClick={() => onSelect(region.id)}
+                onKeyDown={event => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelect(region.id);
+                  }
+                }}
+              >
+                <circle
+                  className="marker-aura"
+                  cx={region.x}
+                  cy={region.y}
+                  r={selected ? 17 : 12}
+                />
+                <circle
+                  className="marker-outer"
+                  cx={region.x}
+                  cy={region.y}
+                  r={selected ? 8 : 6.5}
+                  filter={active && selected ? "url(#node-glow)" : undefined}
+                />
+                <circle
+                  className="marker-core"
+                  cx={region.x}
+                  cy={region.y}
+                  r={active ? 2.7 : 2.2}
+                />
+                {active && (
+                  <circle
+                    className="marker-pulse"
+                    cx={region.x}
+                    cy={region.y}
+                    r="11"
+                  />
+                )}
+                <text
+                  className={`map-city-name ${active ? "name-open" : ""} ${selected ? "name-selected" : ""}`}
+                  x={region.x + region.dx}
+                  y={region.y + region.dy}
+                  textAnchor={region.anchor}
+                >
+                  {region.mapName}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+        <div className="map-selected-chip">
+          <MapPin size={12} />
+          <span>
+            {REGIONS.find(region => region.id === selectedId)?.prefecture ??
+              "日本"}
+          </span>
+          <b>
+            {REGIONS.find(region => region.id === selectedId)?.city ?? "JAPAN"}
+          </b>
+        </div>
+        <div className="map-radar">
+          <span />
+          <span />
+          <span />
+        </div>
+      </div>
 
-  const recordQuest = (key: QuestKey) => {
-    const quest = QUESTS.find((entry) => entry.key === key)!;
-    const current = questProgress[key];
-    if (current >= quest.goal) return;
-    const reachesGoal = current < quest.goal && current + 1 >= quest.goal;
-    setQuestProgress((progress) => ({ ...progress, [key]: Math.min(quest.goal, progress[key] + 1) }));
-    setTutorialStep((step) => Math.max(step, key === "news" ? 1 : key === "trade" ? 2 : 3));
-    setXp((value) => value + 10 + (reachesGoal ? quest.xp : 0));
-    if (reachesGoal) toast.success(`${quest.label} COMPLETE`, { description: `XP +${quest.xp + 10} を獲得しました。` });
+      <div className="map-footer">
+        <div className="map-legend">
+          <span>
+            <i className="legend-dot active-dot" />
+            稼働中
+          </span>
+          <span>
+            <i className="legend-dot locked-dot" />
+            未開設
+          </span>
+          <span>
+            <i className="legend-line" />
+            自動輸送ルート
+          </span>
+        </div>
+        <div className="map-coordinate">
+          35°41′N&nbsp;&nbsp; 139°45′E <span>·</span> TSUKUBA CONTROL
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MachineIcon({ id, size = 17 }: { id: MachineId; size?: number }) {
+  const machine = MACHINES.find(item => item.id === id) ?? MACHINES[0];
+  const Icon = machine.icon;
+  return <Icon size={size} strokeWidth={1.7} />;
+}
+
+function ProductionLine({
+  game,
+  selectedMachine,
+  onSelectMachine,
+  detailed = false,
+}: {
+  game: GameData;
+  selectedMachine: MachineId;
+  onSelectMachine: (id: MachineId) => void;
+  detailed?: boolean;
+}) {
+  const stockValue: Record<MachineId, number> = {
+    supply: game.stock.steel,
+    press: game.stock.chassis,
+    engine: game.stock.engines,
+    tire: game.stock.tireSets,
+    assembly: game.stock.cars,
+    dispatch: game.stock.cars,
   };
-
-  const trade = (side: "buy" | "sell") => {
-    const quantity = Math.max(1, Math.floor(tradeQuantity || 1));
-    const value = selected.price * quantity;
-    const existing = holdings[selected.id] ?? { quantity: 0, avgCost: 0 };
-
-    if (side === "buy") {
-      if (value > cash) return toast.error("残高が不足しています", { description: `必要額: ${formatPrice(selected)} × ${quantity}` });
-      const newQuantity = existing.quantity + quantity;
-      setCash((current) => current - value);
-      setHoldings((current) => ({
-        ...current,
-        [selected.id]: { quantity: newQuantity, avgCost: (existing.avgCost * existing.quantity + value) / newQuantity },
-      }));
-      const creditGain = 25 + (activeEffect?.creditBonus ?? 0);
-      setCredits((current) => current + creditGain);
-      toast.success(`${selected.code} を ${quantity} 単位購入`, { description: `取引の記録で Archive Credit +${creditGain}` });
-      broadcastRoomActivity(`${selected.code} を ${quantity} UNIT 購入`);
-      recordQuest("trade");
-    } else {
-      if (existing.quantity < quantity) return toast.error("保有数量が不足しています", { description: `${selected.code} の保有: ${existing.quantity} 単位` });
-      setCash((current) => current + value);
-      setHoldings((current) => ({ ...current, [selected.id]: { ...existing, quantity: existing.quantity - quantity } }));
-      const creditGain = 15 + (activeEffect?.creditBonus ?? 0);
-      setCredits((current) => current + creditGain);
-      toast.success(`${selected.code} を ${quantity} 単位売却`, { description: `取引の記録で Archive Credit +${creditGain}` });
-      broadcastRoomActivity(`${selected.code} を ${quantity} UNIT 売却`);
-      recordQuest("trade");
-    }
-  };
-
-  const pullArchive = (pack: GachaPack) => {
-    if (credits < pack.cost) return toast.error("Archive Credit が足りません", { description: "売買を記録すると Credit を獲得できます。" });
-    recordQuest("archive");
-    const roll = Math.random();
-    const streak = packStreak[pack.id] ?? 0;
-    const byRarity = (rarity: Rarity) => pack.rewards.find((entry) => entry.rarity === rarity) ?? pack.rewards[0];
-    const reward = streak >= 9 ? byRarity("LEGEND") : roll > 0.9998 ? byRarity("LIMITED") : roll > 0.9978 ? byRarity("MYTHIC") : roll > 0.9798 ? byRarity("LEGEND") : roll > 0.8948 ? byRarity("EPIC") : roll > 0.5748 ? byRarity("RARE") : byRarity("COMMON");
-    const duplicate = archive.some((entry) => entry.id === reward.id);
-    const shardGain = duplicate ? ARCHIVE_SHARD_VALUE[reward.rarity] : 0;
-    setCredits((current) => current - pack.cost);
-    setPackStreak((current) => ({ ...current, [pack.id]: ["LEGEND", "MYTHIC", "LIMITED"].includes(reward.rarity) ? 0 : streak + 1 }));
-    setOpeningPack(pack);
-    setGachaResult(reward);
-    setIsOpening(true);
-    window.setTimeout(() => setIsOpening(false), reward.rarity === "LIMITED" ? 3400 : reward.rarity === "MYTHIC" ? 2500 : reward.rarity === "LEGEND" ? 1900 : 1450);
-    if (duplicate) setArchiveShards((current) => current + shardGain);
-    else setArchive((current) => [reward, ...current]);
-    toast.success(duplicate ? `${reward.name} は重複しました` : `${RARITY_META[reward.rarity].label} を獲得`, { description: duplicate ? `Archive Shard +${shardGain} に変換しました。` : `${reward.name} をアーカイブに保存しました。` });
-    broadcastRoomActivity(`${pack.label} から ${RARITY_META[reward.rarity].label} を獲得`);
-  };
-
-  const syncWithBot = (bot: BotTrader) => {
-    const current = botTrust[bot.id] ?? 0;
-    if (current >= 3) return toast.info(`${bot.name} の観察メモは本日分確認済みです`);
-    setBotTrust((trust) => ({ ...trust, [bot.id]: trust[bot.id] + 1 }));
-    setCredits((value) => value + 12);
-    setXp((value) => value + 15);
-    toast.success(`${bot.name} と観察ログを同期`, { description: "Archive Credit +12 / XP +15。価格とニュースは変化しません。" });
-    broadcastRoomActivity(`${bot.name} の観察ログを確認`);
-  };
-
-  const craftMythic = () => {
-    const reward = GACHA_PACKS.flatMap((pack) => pack.rewards).find((entry) => entry.rarity === "MYTHIC" && !archive.some((owned) => owned.id === entry.id));
-    if (archiveShards < 180) return toast.error("Archive Shard が足りません", { description: "重複アイテムを欠片へ変換すると、MYTHICをクラフトできます。" });
-    if (!reward) return toast.info("未収集のMYTHICはすべて揃っています");
-    setArchiveShards((value) => value - 180);
-    setArchive((current) => [reward, ...current]);
-    toast.success("MYTHIC ARCHIVE をクラフト", { description: `${reward.name} をアーカイブに追加しました。` });
-  };
-
-  const selectedHolding = holdings[selected.id] ?? { quantity: 0, avgCost: 0 };
-  const eventStrength = activeCatalysts.reduce((sum, event) => sum + Math.abs(event.effect[selected.id] ?? 0), 0);
-  const navigateTo = (section: NavigationSection) => {
-    setActiveSection(section);
-    document.getElementById(section)?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
-  const broadcastRoomActivity = (action: string) => {
-    const activity: RoomActivity = { id: `local-${Date.now()}`, player: playerName.trim() || "PULSE PLAYER", action, createdAt: Date.now() };
-    setRoomActivity((current) => [activity, ...current].slice(0, 8));
-    if (socketRef.current?.readyState === WebSocket.OPEN) socketRef.current.send(JSON.stringify({ type: "activity", roomCode, activity }));
-  };
-
-  const connectRoom = () => {
-    const endpoint = import.meta.env.VITE_ROOM_WS_URL as string | undefined;
-    if (!endpoint) {
-      setRoomStatus("setup");
-      return toast.info("共有ルームの接続先を設定してください", { description: "Cloudflare公開時に VITE_ROOM_WS_URL を追加すると接続できます。" });
-    }
-    socketRef.current?.close();
-    setRoomStatus("connecting");
-    try {
-      const url = new URL(endpoint);
-      url.searchParams.set("room", roomCode.trim() || "PULSE-01");
-      const socket = new WebSocket(url.toString());
-      socketRef.current = socket;
-      socket.onopen = () => {
-        setRoomStatus("connected");
-        socket.send(JSON.stringify({ type: "join", roomCode, player: { id: "local", name: playerName.trim() || "PULSE PLAYER", status: "online", level, archiveCount: archive.length, missionCount: completeQuestCount } }));
-        broadcastRoomActivity("ルームに参加");
-      };
-      socket.onmessage = (message) => {
-        try {
-          const payload = JSON.parse(message.data as string) as { type?: string; participants?: RoomParticipant[]; activity?: RoomActivity };
-          if (payload.type === "presence" && payload.participants) setRoomParticipants(payload.participants);
-          if (payload.type === "activity" && payload.activity) setRoomActivity((current) => [payload.activity!, ...current.filter((entry) => entry.id !== payload.activity!.id)].slice(0, 8));
-        } catch { /* ignore malformed room events */ }
-      };
-      socket.onclose = () => setRoomStatus("offline");
-      socket.onerror = () => setRoomStatus("offline");
-    } catch {
-      setRoomStatus("setup");
-      toast.error("共有ルームのURLを確認してください");
-    }
-  };
-
-  const disconnectRoom = () => {
-    socketRef.current?.close();
-    socketRef.current = null;
-    setRoomStatus("offline");
-    setRoomParticipants([]);
+  const stockUnit: Record<MachineId, string> = {
+    supply: "STEEL",
+    press: "CHASSIS",
+    engine: "ENGINES",
+    tire: "TIRE SETS",
+    assembly: "READY CARS",
+    dispatch: "EXPORT QUEUE",
   };
 
   return (
-    <main className="market-shell relative isolate min-h-screen bg-[#081115] text-[#e9efea] lg:grid lg:grid-cols-[278px_minmax(0,1fr)]">
-      <GameCanvas />
-      <aside className="market-sidebar relative z-10 border-b border-white/10 bg-[#0b1519]/95 px-5 py-5 lg:sticky lg:top-0 lg:z-30 lg:h-screen lg:w-[278px] lg:border-b-0 lg:border-r lg:px-6 lg:py-7">
-        <div className="flex items-center justify-between lg:block">
-          <div className="flex items-center gap-3">
-            <PulseMark className="h-10 w-10 text-[#c9f34a]" />
-            <div>
-              <p className="font-display text-[15px] font-bold tracking-[0.14em] text-white">MARKET PULSE</p>
-              <p className="font-mono text-[9px] tracking-[0.18em] text-[#859398]">SIMULATION DESK</p>
-            </div>
+    <section
+      className={`panel production-panel ${detailed ? "production-detailed" : ""}`}
+    >
+      <div className="panel-heading production-heading">
+        <div>
+          <div className="eyebrow">
+            AUTOMATED BUILD PIPELINE / TSUKUBA PLANT
           </div>
-          <div className="flex items-center gap-2 lg:mt-12 lg:block">
-            <span className="live-dot inline-flex items-center gap-2 rounded-full border border-[#4f9bff]/30 bg-[#4f9bff]/[.1] px-2.5 py-1 font-mono text-[9px] tracking-[0.14em] text-[#8fc5ff]"><span className="h-1.5 w-1.5 rounded-full bg-[#4f9bff]" />LIVE SIM</span>
-          </div>
+          <h2>
+            {detailed ? "第01組立ライン" : "組立ライン"}
+            <span className="line-code">LINE 01 · JDM COUPE</span>
+          </h2>
         </div>
-
-        <div className="relative mt-8 hidden overflow-hidden border-y border-white/[.09] py-5 lg:block">
-          <p className="eyebrow text-[#74b5ff]">MARKET PULSE / 01</p>
-          <p className="mt-2 font-display text-[28px] font-bold leading-[.88] tracking-[-.09em] text-white">READ<br />THE<br /><span className="text-[#74b5ff]">PULSE.</span></p>
-          <svg viewBox="0 0 230 38" className="mt-5 h-8 w-[230px] text-[#74b5ff]" fill="none" aria-hidden="true"><path d="M0 22h26l11-12 12 22 18-29 15 20h35l11-9 10 13 14-22 13 17h45" stroke="currentColor" strokeWidth="1.6" /><path d="M0 31h230" stroke="currentColor" strokeOpacity=".22" strokeWidth="1" /></svg>
-          <p className="mt-3 max-w-[190px] font-mono text-[9px] leading-relaxed text-[#718187]">価格の変化を、ニュースの因果から読むための市場レール。</p>
+        <div className="line-health">
+          <span
+            className={
+              Object.values(game.machineOn).every(Boolean)
+                ? "health-led"
+                : "health-led health-warn"
+            }
+          />
+          {Object.values(game.machineOn).filter(Boolean).length} / 6 SYSTEMS
+          ONLINE
         </div>
-
-        <nav className="mt-6 hidden space-y-1 lg:block" aria-label="市場画面の移動">
-          <SideNavButton active={activeSection === "markets"} icon={<LineChart size={16} />} label="MARKETS" onClick={() => navigateTo("markets")} />
-          <SideNavButton active={activeSection === "portfolio"} icon={<WalletCards size={16} />} label="PORTFOLIO" onClick={() => navigateTo("portfolio")} />
-          <SideNavButton active={activeSection === "newsflow"} icon={<Newspaper size={16} />} label="NEWSFLOW" onClick={() => navigateTo("newsflow")} />
-        </nav>
-
-        <div className="mt-7 hidden lg:block">
-          <div className="mb-3 flex items-center justify-between"><p className="eyebrow">MARKET PULSE</p><span className="font-mono text-[10px] text-[#aab7b4]">{tick.toString().padStart(2, "0")}:00</span></div>
-          <div className="space-y-3">
-            <PulseRow label="EQUITY" value={formatMoney(equity)} tone="lime" />
-            <PulseRow label="CASH" value={formatMoney(cash)} tone="neutral" />
-            <PulseRow label="OPEN P/L" value={`${positionPnL >= 0 ? "+" : ""}${formatMoney(positionPnL)}`} tone={positionPnL >= 0 ? "lime" : "coral"} />
-          </div>
-        </div>
-
-        <div className="mt-6 hidden rounded-2xl border border-[#d19b4b]/25 bg-[#d19b4b]/[.07] p-4 lg:block">
-          <div className="flex items-start justify-between"><div><p className="eyebrow text-[#f5c56b]">ARCHIVE GACHA</p><p className="mt-2 text-sm font-medium text-white">市場に影響しない<br />分析コレクション</p></div><Archive size={18} className="text-[#f5c56b]" /></div>
-          <div className="mt-4 flex items-center justify-between border-t border-[#d19b4b]/15 pt-3"><span className="font-mono text-[10px] text-[#c7aaa0]">{credits} CREDIT</span><button onClick={() => { setGachaOpen(true); setGachaResult(null); }} className="text-[10px] font-semibold tracking-[.12em] text-[#f5c56b] hover:text-white">OPEN <ChevronRight size={12} className="inline" /></button></div>
-        </div>
-
-        <div className="mt-auto hidden border-t border-white/10 pt-5 lg:block"><p className="font-mono text-[9px] leading-relaxed text-[#718187]">FICTIONAL MARKET · NO REAL MONEY<br />ニュースも含め全てゲーム内シミュレーションです。</p></div>
-      </aside>
-
-      <section className="relative z-10 min-w-0">
-        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-white/10 bg-[#081115]/90 px-5 py-4 backdrop-blur-xl sm:px-8 lg:px-10">
-          <div className="flex items-center gap-3"><PulseMark className="h-9 w-9 text-[#c9f34a]" /><div><p className="eyebrow">THE OPEN / MARKET PULSE</p><h1 className="mt-1 font-display text-xl font-semibold tracking-tight text-white">知る。選ぶ。動く。</h1></div></div>
-          <div className="flex items-center gap-3"><button className="relative rounded-full p-2 text-[#9babaf] transition hover:bg-white/5 hover:text-white" aria-label="通知"><Bell size={18} /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#4f9bff]" /></button><div className="hidden h-8 border-l border-white/10 sm:block" /><div className="hidden text-right sm:block"><p className="font-mono text-[9px] tracking-[.14em] text-[#718187]">SESSION</p><p className="font-mono text-[11px] text-white">JP / SIM-01</p></div></div>
-        </header>
-
-        <div className="px-5 py-6 sm:px-8 lg:px-10 lg:py-8">
-          <QuestDeck level={level} xp={xp} levelProgress={levelProgress} nextLevelXp={nextLevelXp} quests={questProgress} completeCount={completeQuestCount} tutorialStep={tutorialStep} onGo={(key) => { if (key === "news") navigateTo("newsflow"); else if (key === "trade") document.getElementById("trade-desk")?.scrollIntoView({ behavior: "smooth", block: "center" }); else document.getElementById("archive-vault")?.scrollIntoView({ behavior: "smooth", block: "center" }); }} />
-          <BotTraderDesk bots={botFeed} assets={assets} trust={botTrust} onSync={syncWithBot} />
-          <MarketImpactRibbon asset={selected} newsImpact={selectedNewsImpact} botImpact={selectedBotImpact} orders={selectedBotOrders} />
-          <section id="markets" className="relative scroll-mt-24 overflow-hidden rounded-md border border-[#4f9bff]/25 border-l-2 border-l-[#c9f34a] bg-[#111d21] shadow-[0_30px_60px_rgba(0,0,0,.2)]">
-            <img src={HERO_IMAGE} alt="市場データを表現した抽象的な夜の金融ニュースルーム" className="absolute inset-0 h-full w-full object-cover opacity-55" />
-            <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(8,17,21,.98)_0%,rgba(8,17,21,.88)_40%,rgba(8,17,21,.33)_100%)]" />
-            <div className="relative grid min-h-[245px] gap-6 p-6 min-[680px]:grid-cols-[1fr_310px] sm:p-8 lg:p-9">
-              <div className="max-w-xl self-end"><div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/20 px-3 py-1 font-mono text-[9px] tracking-[.16em] text-[#c6d1d0]"><Radio size={11} className="text-[#4f9bff]" /> MARKET IS MOVING</div><p className="eyebrow text-[#74b5ff]">SELECTED INSTRUMENT / PRICE TAPE</p><div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-1"><h2 className="font-display text-5xl font-bold leading-none tracking-[-.08em] text-white sm:text-6xl">{selected.code}</h2><p className="mb-1 text-sm text-[#b5c3c4]">{selected.name}</p></div><div className="mt-5 flex items-end gap-4"><p className="font-mono text-4xl tracking-[-.08em] text-white">{formatPrice(selected)}</p><ChangePill change={selected.change} size="lg" /></div><div className="mt-4 rounded-lg border border-[#4f9bff]/25 bg-[#4f9bff]/[.09] px-3 py-2"><p className="font-mono text-[10px] leading-relaxed text-[#cbe4ff]"><span className="font-semibold text-[#7eb9ff]">いまの動き：</span>{selected.change >= 0 ? "上がっています" : "下がっています"}。主な理由は「{activeCatalysts[0]?.title ?? "新しい材料を待っています"}」</p></div><div className="mt-4 flex items-center gap-3"><span className="font-mono text-[9px] tracking-[.12em] text-[#789095]">CAUSE</span><span className="h-px w-12 bg-[#4f9bff]" /><span className="truncate font-mono text-[10px] text-[#d6e3d2]">{activeCatalysts[0]?.tag ?? "AWAITING SIGNAL"}</span></div></div>
-              <div className="self-end rounded-xl border border-[#4f9bff]/25 bg-[#071012]/75 p-4 backdrop-blur-sm"><div className="flex items-center justify-between"><p className="eyebrow">DOMINANT CATALYST</p><Zap size={15} className="text-[#74b5ff]" /></div><p className="mt-3 font-display text-lg font-medium leading-snug text-white">{activeCatalysts[0]?.title ?? "材料を待機中"}</p><div className="mt-4 flex items-center gap-3"><div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-[#4f9bff]" style={{ width: `${Math.min(94, 24 + eventStrength * 5500)}%` }} /></div><span className="font-mono text-[10px] text-[#74b5ff]">{activeCatalysts[0]?.impact ?? 0}%</span></div></div>
+      </div>
+      <div className="production-route-note">
+        <span className="route-live-icon">
+          <Activity size={13} />
+        </span>
+        <span>資材から輸出まで、自動で流れる生産ネットワーク</span>
+        <span className="production-cycle">
+          CYCLE {String(game.tick).padStart(4, "0")}
+        </span>
+      </div>
+      <div className="station-track">
+        {MACHINES.map((machine, index) => {
+          const level = game.levels[machine.id];
+          const enabled = game.machineOn[machine.id];
+          const selected = selectedMachine === machine.id;
+          const period = periodFor(game, machine.id);
+          const progress =
+            machine.id === "supply"
+              ? (game.tick * 19) % 100
+              : ((game.tick % period) / period) * 100;
+          return (
+            <div className="station-wrap" key={machine.id}>
+              <button
+                type="button"
+                className={`station-card ${selected ? "station-selected" : ""} ${!enabled ? "station-off" : ""}`}
+                onClick={() => onSelectMachine(machine.id)}
+                aria-pressed={selected}
+              >
+                <div className="station-card-top">
+                  <span>{machine.area}</span>
+                  <span
+                    className={`station-state ${enabled ? "" : "state-off"}`}
+                  >
+                    <i />
+                    {enabled ? "RUN" : "OFF"}
+                  </span>
+                </div>
+                <div className="station-icon-row">
+                  <span className={`station-icon icon-${machine.id}`}>
+                    <MachineIcon id={machine.id} size={18} />
+                  </span>
+                  <span className="level-tag">LV.{level}</span>
+                </div>
+                <div className="station-name">{machine.name}</div>
+                <div className="station-english">{machine.english}</div>
+                <div className="station-output">
+                  <span>{stockUnit[machine.id]}</span>
+                  <strong>
+                    {String(stockValue[machine.id]).padStart(2, "0")}
+                  </strong>
+                </div>
+                <div className="station-progress">
+                  <span
+                    style={{ width: `${enabled ? Math.max(7, progress) : 0}%` }}
+                  />
+                </div>
+                <div className="station-foot">
+                  <span>{machine.input}</span>
+                  <ArrowRight size={11} />
+                  <span>{machine.output}</span>
+                </div>
+              </button>
+              {index < MACHINES.length - 1 && (
+                <div
+                  className={`station-connector ${enabled && game.machineOn[MACHINES[index + 1].id] ? "connector-live" : ""}`}
+                >
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              )}
             </div>
-          </section>
-
-          <section className="mt-5 flex flex-wrap items-center gap-2 rounded-xl border border-white/[.09] bg-white/[.025] px-4 py-3"><span className="mr-1 font-mono text-[9px] tracking-[.14em] text-[#60a5fa]">PLAY LOOP</span><span className="rounded-md bg-white/[.06] px-2.5 py-1 font-mono text-[10px] text-white">1. ニュースを読む</span><ChevronRight size={13} className="text-[#718187]" /><span className="rounded-md bg-white/[.06] px-2.5 py-1 font-mono text-[10px] text-white">2. 特徴を知る</span><ChevronRight size={13} className="text-[#718187]" /><span className="rounded-md bg-[#4f9bff]/[.14] px-2.5 py-1 font-mono text-[10px] text-[#74b5ff]">3. 売買する</span><span className="ml-auto font-mono text-[9px] text-[#718187]">読み終えたら、決めよう。</span></section>
-
-          <div id="portfolio" className="scroll-mt-24"><AssetOverview cash={cash} marketValue={marketValue} equity={equity} pnl={positionPnL} positions={positions} /></div>
-          <SaveStatusPanel savedAt={savedAt} onSave={() => saveNow(true)} onReset={resetSave} />
-          <ArchiveModuleRack archive={archive} activeArchive={activeArchive} activeEffect={activeEffect} onActivate={(reward) => { setActiveArchiveId(reward.id); toast.success(`${reward.name} を有効化`, { description: `${ARCHIVE_EFFECTS[reward.rarity].label} が利用できます。` }); }} onDeactivate={() => setActiveArchiveId(null)} candles={chartCandles} catalysts={activeCatalysts} />
-
-          <div className="mt-5 grid gap-6 min-[760px]:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_370px]">
-            <div className="min-w-0 space-y-6">
-              <section className="panel-card relative overflow-hidden p-0">
-                <div className="absolute left-0 top-0 h-full w-1 bg-[#4f9bff]" />
-                <div className="flex flex-col justify-between gap-4 border-b border-white/[.09] px-5 py-5 sm:flex-row sm:items-center"><div className="flex items-center gap-4"><div className="hidden font-mono text-[10px] tracking-[.15em] text-[#74b5ff] sm:block">01</div><div><p className="eyebrow">PRICE ACTION / OHLC + VOLUME</p><p className="mt-1 font-display text-xl font-medium tracking-[-.03em] text-white">{selected.name}<span className="ml-2 font-mono text-xs font-normal text-[#7c8c91]">{selected.kind.toUpperCase()}</span></p></div></div><div className="flex items-center gap-2"><span className="rounded-md bg-white/[.05] px-2 py-1 font-mono text-[9px] text-[#a7b6b6]">CANDLE</span><span className="rounded-md border border-[#4f9bff]/25 bg-[#4f9bff]/[.09] px-2 py-1 font-mono text-[9px] text-[#74b5ff]">TICK / 5S</span></div></div>
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[.07] bg-black/10 px-5 py-3"><div className="flex items-center gap-1 overflow-x-auto rounded-md border border-white/[.08] bg-white/[.025] p-1">{TIMEFRAMES.map((period) => <button key={period} onClick={() => setTimeframe(period)} className={`shrink-0 rounded px-2.5 py-1.5 font-mono text-[10px] transition ${timeframe === period ? "bg-[#4f9bff] text-white" : "text-[#85959a] hover:bg-white/[.07] hover:text-white"}`}>{period}</button>)}</div><div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px]"><span className="text-[#738287]">O <b className="font-medium text-[#d8e1dc]">{formatMoney(chartCandles.at(-1)?.open ?? selected.price, selected.kind === "Crypto" ? 3 : 2)}</b></span><span className="text-[#738287]">H <b className="font-medium text-[#d8e1dc]">{formatMoney(chartCandles.at(-1)?.high ?? selected.price, selected.kind === "Crypto" ? 3 : 2)}</b></span><span className="text-[#738287]">L <b className="font-medium text-[#d8e1dc]">{formatMoney(chartCandles.at(-1)?.low ?? selected.price, selected.kind === "Crypto" ? 3 : 2)}</b></span><span className="text-[#738287]">C <b className={`font-medium ${selected.change >= 0 ? "text-[#5ee8b0]" : "text-[#ff9e9e]"}`}>{formatPrice(selected)}</b></span></div></div>
-                <div className="h-[330px] px-2 pb-3 pt-4 min-[760px]:h-[390px] sm:px-4"><BlueCandlestickPanel candles={chartCandles} crypto={selected.kind === "Crypto"} /></div>
-              </section>
-
-              <div onClick={() => recordQuest("news")}><NewsFlow events={events} /></div>
-            </div>
-
-            <div className="space-y-6">
-              <section className="panel-card p-5"><div className="flex items-center justify-between"><div><p className="eyebrow">ORDER TICKET</p><p className="mt-1 font-display text-lg font-medium text-white">{selected.code}</p></div><CandlestickChart size={19} className="text-[#60a5fa]" /></div><div className="mt-5 grid grid-cols-2 gap-3"><div className="rounded-lg border border-[#4f9bff]/15 bg-[#4f9bff]/[.08] p-3"><p className="eyebrow text-[#74b5ff]">手元資金</p><p className="mt-1 font-mono text-sm text-white">{formatMoney(cash, 0)}</p></div><div className="rounded-lg bg-white/[.04] p-3"><p className="eyebrow">この銘柄の保有</p><p className="mt-1 font-mono text-sm text-white">{selectedHolding.quantity} <span className="text-[10px] text-[#819196]">UNIT</span></p></div></div><div className="mt-4"><label className="eyebrow">QUANTITY</label><div className="mt-2 flex overflow-hidden rounded-lg border border-white/[.12] bg-black/20"><button onClick={() => setTradeQuantity((value) => Math.max(1, value - 1))} className="grid w-11 place-items-center border-r border-white/[.1] text-[#a7b6b6] transition hover:bg-white/[.06] hover:text-white"><Minus size={15} /></button><input value={tradeQuantity} onChange={(event) => setTradeQuantity(Number(event.target.value))} type="number" min={1} className="min-w-0 flex-1 bg-transparent px-3 py-3 text-center font-mono text-sm text-white outline-none" /><button onClick={() => setTradeQuantity((value) => value + 1)} className="grid w-11 place-items-center border-l border-white/[.1] text-[#a7b6b6] transition hover:bg-white/[.06] hover:text-white"><Plus size={15} /></button></div></div><div className="mt-4 flex items-center justify-between font-mono text-[10px]"><span className="text-[#7a898d]">この注文で使う金額</span><span className="text-white">{formatMoney(selected.price * Math.max(1, tradeQuantity || 1))}</span></div><div className="mt-4 grid grid-cols-2 gap-2"><Button onClick={() => trade("buy")} className="h-11 bg-[#4f9bff] font-display text-[11px] font-semibold tracking-[.08em] text-white hover:bg-[#72b2ff]">BUY {selected.code}</Button><Button onClick={() => trade("sell")} variant="outline" className="h-11 border-[#ff7474]/35 bg-[#ff7474]/[.08] font-display text-[11px] font-semibold tracking-[.08em] text-[#ff9e9e] hover:bg-[#ff7474]/[.16] hover:text-white">SELL</Button></div><p className="mt-3 flex gap-1.5 text-[10px] leading-relaxed text-[#718187]"><Info size={13} className="mt-0.5 shrink-0" />ゲーム内通貨のみ。注文はこのシミュレーション市場の価格に反映されません。</p></section>
-
-              <ProfilePreview profile={selectedProfile} asset={selected} onOpen={() => setProfileOpen(true)} />
-
-              <section className="panel-card relative overflow-hidden border-l-2 border-l-[#4f9bff]"><div className="flex items-center justify-between border-b border-white/[.09] px-5 py-4"><div><p className="eyebrow">CAUSE → PRICE</p><p className="mt-1 font-display text-lg font-medium text-white">因果メモ</p><p className="mt-0.5 text-[11px] text-[#7d8d91]">価格に効いている材料を優先表示</p></div><Newspaper size={17} className="text-[#74b5ff]" /></div><div className="divide-y divide-white/[.07]">{activeCatalysts.length > 0 ? activeCatalysts.map((event) => <CatalystCard key={event.id} event={event} assetId={selected.id} />) : <div className="p-5 text-sm text-[#8a999d]">この銘柄への直接的なニュース影響はありません。</div>}</div></section>
-
-              <section className="panel-card overflow-hidden"><div className="flex items-center justify-between px-5 py-4"><div><p className="eyebrow">YOUR POSITION</p><p className="mt-1 text-sm text-[#a9b7b8]">保有は市場を動かさない</p></div><WalletCards size={17} className="text-[#9cadac]" /></div><div className="grid grid-cols-3 border-t border-white/[.09]"><MiniStat label="MARKET" value={formatMoney(marketValue, 0)} /><MiniStat label="CASH" value={formatMoney(cash, 0)} /><MiniStat label="P/L" value={`${positionPnL >= 0 ? "+" : ""}${formatMoney(positionPnL, 0)}`} tone={positionPnL >= 0 ? "lime" : "coral"} /></div></section>
-            </div>
-          </div>
-
-          <section className="mt-6 grid gap-6 min-[760px]:grid-cols-[1.2fr_.8fr]">
-            <MarketBoard assets={filteredAssets} tab={tab} onTab={setTab} selectedId={selected.id} onSelect={setSelectedId} />
-
-            <section className="relative overflow-hidden rounded-2xl border border-[#d19b4b]/25 bg-[#16130f] p-6"><img src={GACHA_IMAGE} alt="分析アーカイブのカプセル" className="absolute -right-14 -top-12 h-64 w-64 object-cover opacity-45 mix-blend-screen" /><div className="relative flex h-full flex-col"><div className="flex items-center justify-between"><div><p className="eyebrow text-[#f5c56b]">SEALED ANALYSIS ARCHIVE</p><p className="mt-1 font-mono text-[9px] tracking-[.1em] text-[#8e704c]">3 PACKS / RECORD {String(archive.length + 2001).padStart(4, "0")}</p></div><Gem size={18} className="text-[#f5c56b]" /></div><h2 className="mt-4 max-w-[250px] font-display text-2xl font-semibold leading-tight text-white">集め方も、自分で選ぶ。</h2><p className="mt-3 max-w-[330px] text-xs leading-relaxed text-[#b49e86]">ニュース、業界、スタイル。好きなテーマで記録を集めよう。市場の価格やニュースには影響しません。</p><div className="mt-4 flex gap-1.5">{GACHA_PACKS.map((pack) => <span key={pack.id} className="rounded-md border px-2 py-1 font-mono text-[8px] tracking-[.08em]" style={{ color: pack.accent, borderColor: `${pack.accent}40`, backgroundColor: `${pack.accent}0d` }}>{pack.kicker}</span>)}</div><div className="mt-auto flex items-center justify-between border-t border-[#d19b4b]/20 pt-5"><div><p className="font-mono text-[9px] tracking-[.12em] text-[#a78a6d]">AVAILABLE</p><p className="mt-1 font-mono text-xl text-[#f6cb72]">{credits} <span className="text-[10px]">CREDIT</span></p></div><Button onClick={() => { setGachaOpen(true); setGachaResult(null); setActivePack(null); }} className="bg-[#f6c96a] font-display text-[11px] font-semibold tracking-[.08em] text-[#1c1408] hover:bg-[#ffe09a]">CHOOSE PACK</Button></div></div></section>
-          </section>
-          <div id="archive-vault"><ArchiveVault archive={visibleArchive} activeFilter={archiveFilter} onFilter={setArchiveFilter} totalCount={archive.length} shards={archiveShards} onCraft={craftMythic} /></div>
-          <ArchiveForge shards={archiveShards} onCraft={craftMythic} />
-          <PackProtectionPanel streaks={packStreak} />
-          <LimitedDropBanner />
-          <SeriesCollectionDeck series={seriesProgress} />
-          <SharedRoomPanel playerName={playerName} roomCode={roomCode} roomStatus={roomStatus} participants={roomParticipants} activity={roomActivity} onPlayerName={setPlayerName} onRoomCode={setRoomCode} onConnect={connectRoom} onDisconnect={disconnectRoom} />
-          <FloorLeaderboard playerName={playerName} level={level} archiveCount={archive.length} missionCount={completeQuestCount} roomStatus={roomStatus} participants={roomParticipants} />
-        </div>
-      </section>
-
-      <button onClick={() => { setGachaOpen(true); setGachaResult(null); setActivePack(null); }} className="fixed bottom-5 right-5 z-30 flex items-center gap-2 rounded-full border border-[#d19b4b]/35 bg-[#21170d] px-4 py-3 text-xs font-semibold tracking-[.08em] text-[#f6c96a] shadow-xl lg:hidden"><Archive size={15} /> {credits} CR</button>
-
-      {gachaOpen && <div role="dialog" aria-modal="true" aria-label="Archive Gacha" className="fixed inset-0 z-50 grid place-items-center bg-[#030708]/75 p-4 backdrop-blur-md"><div className="gacha-modal relative w-full max-w-2xl overflow-hidden rounded-2xl border border-[#d19b4b]/35 bg-[#15120d] p-6 shadow-2xl sm:p-8"><button onClick={() => setGachaOpen(false)} className="absolute right-4 top-4 rounded-full p-2 text-[#a98d70] transition hover:bg-white/10 hover:text-white" aria-label="閉じる"><X size={18} /></button>{!gachaResult ? <div><div className="text-center"><p className="eyebrow text-[#f6c96a]">ARCHIVE PACKS</p><h2 className="mt-3 font-display text-3xl font-semibold text-white">今日は、何を集める？</h2><p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[#b8a08a]">気になるパックを選ぶだけ。全部、プロフィールを彩るコレクションです。</p></div><div className="mt-7 grid gap-3 sm:grid-cols-3">{GACHA_PACKS.map((pack) => <button key={pack.id} onClick={() => setActivePack(pack)} className={`group rounded-xl border p-4 text-left transition hover:-translate-y-0.5 ${activePack?.id === pack.id ? "bg-white/[.08]" : "bg-black/10 hover:bg-white/[.05]"}`} style={{ borderColor: activePack?.id === pack.id ? pack.accent : `${pack.accent}4a` }}><div className="flex items-center justify-between"><span className="grid h-9 w-9 place-items-center rounded-lg" style={{ backgroundColor: `${pack.accent}18`, color: pack.accent }}><RewardIcon type={pack.icon} /></span><span className="font-mono text-[9px]" style={{ color: pack.accent }}>{pack.kicker}</span></div><p className="mt-4 font-display text-base font-semibold text-white">{pack.label}</p><p className="mt-1 min-h-[38px] text-[11px] leading-relaxed text-[#a58d76]">{pack.description}</p><p className="mt-4 font-mono text-xs" style={{ color: pack.accent }}>{pack.cost} CREDIT</p></button>)}</div>{activePack && <div className="mt-5 flex flex-col items-center justify-between gap-3 rounded-xl border border-[#d19b4b]/20 bg-black/15 p-4 sm:flex-row"><p className="text-center text-xs text-[#b8a08a]">選択中: <span className="font-semibold text-white">{activePack.label}</span>。市場には影響しません。</p><Button onClick={() => pullArchive(activePack)} className="h-11 bg-[#f6c96a] px-6 font-display text-[11px] font-semibold tracking-[.08em] text-[#1d1509] hover:bg-[#ffe09a]">{activePack.cost} CREDIT で開封</Button></div>}<p className="mt-4 text-center text-[10px] text-[#8c735c]">過去のアーカイブ: {archive.length} 件</p></div> : <div className="py-6 text-center"><div className="mx-auto grid h-20 w-20 place-items-center rounded-2xl border" style={{ color: gachaResult.accent, borderColor: `${gachaResult.accent}66`, backgroundColor: `${gachaResult.accent}12` }}><RewardIcon type={gachaResult.icon} /></div><p className="mt-7 font-mono text-[10px] tracking-[.18em]" style={{ color: gachaResult.accent }}>{gachaResult.rarity}</p><h2 className="mt-2 font-display text-3xl font-semibold text-white">{gachaResult.name}</h2><p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-[#b8a08a]">{gachaResult.detail}</p><div className="mt-7 rounded-lg border border-white/10 bg-black/15 px-4 py-3 text-left text-[11px] leading-relaxed text-[#928273]"><span className="font-semibold text-[#d9b37a]">MARKET-SAFE:</span> この報酬は見た目・記録用途のみ。市場の価格計算・ニュース選択・取引結果には影響しません。</div><Button onClick={() => setGachaOpen(false)} className="mt-6 h-11 w-full bg-white text-[#172116] hover:bg-[#e6efe6]">ARCHIVE に保存</Button></div>}</div></div>}
-      {levelUp && <div className="level-up-toast fixed left-1/2 top-5 z-[90] -translate-x-1/2 rounded-xl border border-[#8fc5ff]/45 bg-[#081d38]/95 px-5 py-3 text-center shadow-[0_18px_48px_rgba(0,0,0,.4)] backdrop-blur-xl"><p className="font-mono text-[9px] tracking-[.18em] text-[#8fc5ff]">LEVEL UP</p><p className="mt-1 font-display text-xl font-semibold text-white">PULSE LEVEL {levelUp}</p></div>}
-      {isOpening && openingPack && <ArchiveOpeningOverlay pack={openingPack} result={gachaResult} />}
-      {profileOpen && <ProfileModal asset={selected} profile={selectedProfile} onClose={() => setProfileOpen(false)} />}
-    </main>
+          );
+        })}
+      </div>
+      {detailed && <InventoryBoard game={game} />}
+    </section>
   );
 }
 
-function PulseRow({ label, value, tone }: { label: string; value: string; tone: "lime" | "coral" | "neutral" }) {
-  const colors = { lime: "text-[#74b5ff]", coral: "text-[#ff9e9e]", neutral: "text-[#e7efea]" };
-  return <div><div className="mb-1.5 flex items-center justify-between"><span className="font-mono text-[9px] tracking-[.13em] text-[#6c7d82]">{label}</span><span className={`font-mono text-[11px] ${colors[tone]}`}>{value}</span></div><div className="h-px bg-white/[.09]"><div className={`h-full ${tone === "coral" ? "bg-[#ff7474]" : tone === "lime" ? "bg-[#4f9bff]" : "bg-[#8fa09e]"}`} style={{ width: tone === "lime" ? "72%" : tone === "coral" ? "43%" : "56%" }} /></div></div>;
-}
-
-function PulseMark({ className }: { className: string }) {
-  return <svg viewBox="0 0 48 48" className={className} role="img" aria-label="MARKET PULSE"><path d="M4 38V7h11c10 0 10 15 0 15H4l8-8 5 20 7-18 6 14 6-14 8 22" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3.2" /></svg>;
-}
-
-function SideNavButton({ active, icon, label, onClick }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
-  return <button type="button" onClick={onClick} aria-current={active ? "page" : undefined} className={`group flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-xs transition ${active ? "bg-[#4f9bff]/[.16] text-white shadow-[inset_0_0_0_1px_rgba(79,155,255,.22)]" : "text-[#839297] hover:bg-[#4f9bff]/[.07] hover:text-white"}`}><span className={active ? "text-[#74b5ff]" : "text-[#7e9299]"}>{icon}</span><span className="font-display text-[11px] font-medium tracking-[.12em]">{label}</span>{active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[#4f9bff]" />}</button>;
-}
-
-function ChangePill({ change, size = "sm" }: { change: number; size?: "sm" | "lg" }) {
-  const up = change >= 0;
-  return <span className={`inline-flex items-center gap-1 rounded-md font-mono ${size === "lg" ? "px-2.5 py-1 text-sm" : "px-2 py-1 text-[10px]"} ${up ? "bg-[#36d399]/[.13] text-[#5ee8b0]" : "bg-[#ff7474]/[.12] text-[#ff9e9e]"}`}>{up ? <TrendingUp size={size === "lg" ? 15 : 12} /> : <TrendingDown size={size === "lg" ? 15 : 12} />}{up ? "+" : ""}{change.toFixed(2)}%</span>;
-}
-
-function QuestDeck({ level, xp, levelProgress, nextLevelXp, quests, completeCount, tutorialStep, onGo }: { level: number; xp: number; levelProgress: number; nextLevelXp: number; quests: QuestProgress; completeCount: number; tutorialStep: number; onGo: (key: QuestKey) => void }) {
-  const tutorial = ["ニュースで理由を読む", "少額で1回売買する", "アーカイブを確認する"];
-  return <section className="mb-5 overflow-hidden rounded-2xl border border-[#4f9bff]/35 bg-[#071a32]/90 shadow-[0_20px_45px_rgba(0,0,0,.2)] backdrop-blur-sm"><div className="grid gap-0 lg:grid-cols-[.83fr_1.7fr]"><div className="relative overflow-hidden border-b border-white/[.09] p-5 lg:border-b-0 lg:border-r sm:p-6"><div className="absolute -right-9 -top-10 h-32 w-32 rounded-full bg-[#4f9bff]/20 blur-2xl" /><div className="relative"><p className="eyebrow text-[#8fc5ff]">EXCHANGE FLOOR / PLAYER</p><div className="mt-3 flex items-end gap-3"><span className="font-mono text-5xl font-semibold tracking-[-.1em] text-white">{String(level).padStart(2, "0")}</span><div className="pb-1"><p className="font-display text-base font-semibold text-white">PULSE LEVEL</p><p className="font-mono text-[10px] text-[#8ca9c6]">{xp} XP / NEXT {nextLevelXp}</p></div></div><div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-[#4f9bff] transition-[width] duration-500" style={{ width: `${Math.min(100, levelProgress)}%` }} /></div><p className="mt-3 text-xs leading-relaxed text-[#a8bfd6]">ニュースの理由を読み、売買を記録し、コレクションを揃える。市場はあなたの取引では動きません。</p></div></div><div className="p-5 sm:p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow text-[#8fc5ff]">TODAY'S MISSIONS</p><p className="mt-1 font-display text-lg font-semibold text-white">次の小さな一手</p></div><span className="rounded-lg border border-[#4f9bff]/30 bg-[#4f9bff]/[.1] px-3 py-2 font-mono text-[10px] text-[#9ecbff]">{completeCount}/3 COMPLETE</span></div><div className="mt-4 grid gap-2 md:grid-cols-3">{QUESTS.map((quest) => { const progress = quests[quest.key]; const done = progress >= quest.goal; return <button type="button" key={quest.key} onClick={() => onGo(quest.key)} className={`rounded-xl border p-3 text-left transition hover:-translate-y-0.5 ${done ? "border-[#5ee8b0]/35 bg-[#5ee8b0]/[.08]" : "border-white/[.1] bg-black/15 hover:border-[#4f9bff]/45 hover:bg-[#4f9bff]/[.08]"}`}><div className="flex items-start justify-between gap-2"><span className={`font-mono text-[9px] tracking-[.12em] ${done ? "text-[#5ee8b0]" : "text-[#8fc5ff]"}`}>{done ? "DONE" : quest.label}</span><span className="font-mono text-[9px] text-[#8ca0ae]">+{quest.xp} XP</span></div><p className="mt-3 font-display text-sm font-semibold text-white">{quest.detail}</p><div className="mt-3 flex items-center justify-between font-mono text-[10px]"><span className="text-[#a9bbc7]">{Math.min(progress, quest.goal)}/{quest.goal}</span><span className={done ? "text-[#5ee8b0]" : "text-[#8fc5ff]"}>{done ? "READY" : "GO"}</span></div></button>; })}</div><div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/[.08] pt-4"><span className="font-mono text-[9px] tracking-[.12em] text-[#8fc5ff]">STARTER COMPASS</span>{tutorial.map((label, index) => <span key={label} className={`rounded-md border px-2.5 py-1 font-mono text-[9px] ${tutorialStep > index ? "border-[#5ee8b0]/35 bg-[#5ee8b0]/[.08] text-[#5ee8b0]" : "border-white/[.1] bg-white/[.03] text-[#8fa3ac]"}`}>{tutorialStep > index ? "DONE" : `${index + 1}.`} {label}</span>)}</div></div></div></section>;
-}
-
-function MarketImpactRibbon({ asset, newsImpact, botImpact, orders }: { asset: Asset; newsImpact: number; botImpact: number; orders: BotTrader[] }) {
-  const flow = (value: number) => `${value >= 0 ? "+" : ""}${(value * 100).toFixed(2)}%`;
-  const botNames = orders.length ? orders.map((bot) => `${bot.name} ${bot.action.side}`).join(" · ") : "BOT ORDER待機";
-  return <section className="mb-4 overflow-hidden border-y border-[#4f9bff]/25 bg-[#061214]/85"><div className="grid gap-px bg-white/[.07] sm:grid-cols-[1.1fr_.9fr_.9fr]"><div className="bg-[#061214] px-4 py-3"><p className="eyebrow text-[#8fc5ff]">MARKET IMPACT / {asset.code}</p><p className="mt-1 font-display text-sm font-semibold text-white">ニュースと注文の合流点</p></div><div className="bg-[#061214] px-4 py-3"><p className="font-mono text-[9px] tracking-[.1em] text-[#8fa4a5]">NEWS SIGNAL</p><p className={`mt-1 font-mono text-sm ${newsImpact >= 0 ? "text-[#c9f34a]" : "text-[#ff9e9e]"}`}>{flow(newsImpact)}</p></div><div className="bg-[#061214] px-4 py-3"><p className="font-mono text-[9px] tracking-[.1em] text-[#8fa4a5]">BOT ORDER FLOW</p><p className={`mt-1 font-mono text-sm ${botImpact >= 0 ? "text-[#c9f34a]" : "text-[#ff9e9e]"}`}>{flow(botImpact)} <span className="ml-2 text-[9px] text-[#95a8a7]">{botNames}</span></p></div></div></section>;
-}
-
-function BotTraderDesk({ bots, assets, trust, onSync }: { bots: BotTrader[]; assets: Asset[]; trust: Record<string, number>; onSync: (bot: BotTrader) => void }) {
-  return <section className="mb-5 overflow-hidden rounded-2xl border border-[#c9f34a]/25 bg-[#0a1719]/92 shadow-[0_18px_42px_rgba(0,0,0,.18)]">
-    <div className="flex flex-col justify-between gap-3 border-b border-white/[.08] px-5 py-4 sm:flex-row sm:items-center sm:px-6">
-      <div><p className="eyebrow text-[#c9f34a]">VIRTUAL BOT DESK / MARKET PARTICIPANTS</p><h2 className="mt-1 font-display text-lg font-semibold text-white">BOTトレーダーの注文フロー</h2><p className="mt-1 text-xs text-[#91a3a3]">BOTはニュースを解釈して架空市場へADD／TRIM注文を出し、その圧力が価格更新に反映されます。ニュース内容とガチャ排出率は変えません。</p></div>
-      <span className="rounded-lg border border-[#c9f34a]/30 bg-[#c9f34a]/[.08] px-3 py-2 font-mono text-[10px] text-[#c9f34a]">4 ACTIVE BOTS</span>
+function InventoryBoard({ game }: { game: GameData }) {
+  const items: Array<{
+    label: string;
+    key: keyof Stock;
+    code: string;
+    icon: LucideIcon;
+    tone: string;
+  }> = [
+    { label: "鋼材", key: "steel", code: "STEEL", icon: Boxes, tone: "warm" },
+    {
+      label: "ゴム",
+      key: "rubber",
+      code: "RUBBER",
+      icon: CircleGauge,
+      tone: "olive",
+    },
+    {
+      label: "シャシー",
+      key: "chassis",
+      code: "CHASSIS",
+      icon: Hammer,
+      tone: "silver",
+    },
+    {
+      label: "エンジン",
+      key: "engines",
+      code: "ENGINE",
+      icon: Cog,
+      tone: "orange",
+    },
+    {
+      label: "タイヤセット",
+      key: "tireSets",
+      code: "TIRES",
+      icon: CircleGauge,
+      tone: "dark",
+    },
+    {
+      label: "完成車",
+      key: "cars",
+      code: "READY",
+      icon: CarFront,
+      tone: "red",
+    },
+  ];
+  return (
+    <div className="inventory-board">
+      <div className="inventory-title">
+        <div>
+          <div className="eyebrow">INVENTORY / LIVE STOCK</div>
+          <h3>工場在庫</h3>
+        </div>
+        <span className="inventory-total">
+          <PackageCheck size={14} /> AUTO-SYNC
+        </span>
+      </div>
+      <div className="inventory-grid">
+        {items.map(item => {
+          const Icon = item.icon;
+          return (
+            <div className="inventory-cell" key={item.code}>
+              <span className={`inventory-icon tone-${item.tone}`}>
+                <Icon size={15} />
+              </span>
+              <div>
+                <span>{item.code}</span>
+                <b>{item.label}</b>
+              </div>
+              <strong>
+                {formatNumber(game.stock[item.key])}
+                <small> u</small>
+              </strong>
+            </div>
+          );
+        })}
+      </div>
     </div>
-    <div className="grid gap-px bg-white/[.07] md:grid-cols-2 xl:grid-cols-4">{bots.map((bot) => {
-      const asset = assets.find((entry) => entry.id === bot.action.assetId);
-      const synced = trust[bot.id] ?? 0;
-      const impactLabel = `${bot.action.impact >= 0 ? "+" : ""}${(bot.action.impact * 100).toFixed(2)}%`;
-      return <article key={bot.id} className="bg-[#0a1719] p-4"><div className="flex items-start justify-between gap-3"><div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-full border font-mono text-xs font-semibold" style={{ color: bot.accent, borderColor: `${bot.accent}66`, backgroundColor: `${bot.accent}12` }}>{bot.name.slice(0, 1)}</span><div><p className="font-display text-sm font-semibold text-white">{bot.name}</p><p className="font-mono text-[8px] tracking-[.1em]" style={{ color: bot.accent }}>{bot.role}</p></div></div><span className={`rounded border px-1.5 py-1 font-mono text-[8px] ${bot.action.side === "ADD" ? "border-[#c9f34a]/35 bg-[#c9f34a]/[.1] text-[#c9f34a]" : bot.action.side === "TRIM" ? "border-[#ff917f]/35 bg-[#ff917f]/[.08] text-[#ff9e9e]" : "border-white/[.12] text-[#aab6b8]"}`}>{bot.action.side}</span></div><p className="mt-4 font-mono text-[10px] text-[#c7d5d5]">{asset?.code ?? "WATCH"} · CONF {bot.action.confidence} · <span className={bot.action.impact >= 0 ? "text-[#c9f34a]" : "text-[#ff9e9e]"}>{impactLabel}</span></p><p className="mt-2 min-h-[34px] text-[10px] leading-relaxed text-[#84989a]">{bot.action.reason}</p><div className="mt-4 flex items-center justify-between border-t border-white/[.08] pt-3"><span className="font-mono text-[9px] text-[#71878a]">SYNC {synced}/3</span><button type="button" onClick={() => onSync(bot)} disabled={synced >= 3} className="rounded-md border border-white/[.14] px-2.5 py-1.5 font-mono text-[9px] text-white transition hover:border-[#c9f34a]/50 hover:bg-[#c9f34a]/[.1] hover:text-[#c9f34a] disabled:cursor-not-allowed disabled:opacity-35">{synced >= 3 ? "LOGGED" : "SYNC NOTE"}</button></div></article>;
-    })}</div>
-  </section>;
+  );
 }
 
-function NewsFlow({ events }: { events: MarketEvent[] }) {
-  return <section id="newsflow" className="panel-card scroll-mt-24 overflow-hidden"><div className="flex items-center justify-between border-b border-white/[.09] px-5 py-5"><div><p className="eyebrow">LIVE NEWSFLOW</p><p className="mt-1 font-display text-lg font-medium text-white">市場を動かす要因</p><p className="mt-1 text-[11px] text-[#829296]">グラフを見る前に、動いた理由を確認。</p></div><span className="font-mono text-[10px] text-[#839398]">UPDATED / 5 SEC</span></div><div className="divide-y divide-white/[.07]">{events.map((event) => <article key={event.id} className="group grid gap-4 px-5 py-4 sm:grid-cols-[95px_1fr_auto]"><div><p className={`font-mono text-[9px] tracking-[.12em] ${event.direction === "up" ? "text-[#74b5ff]" : event.direction === "down" ? "text-[#ff9e9e]" : "text-[#a6b2b2]"}`}>{event.tag}</p><p className="mt-2 flex items-center gap-1 font-mono text-[10px] text-[#718187]"><Clock3 size={11} /> {event.age * 5 + 4}s ago</p></div><div><h3 className="font-display text-base font-medium leading-relaxed text-white transition group-hover:text-[#a9d2ff]">{event.title}</h3><p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-[#89989b]">{event.copy}</p></div><div className="flex items-start gap-2 sm:flex-col sm:items-end"><span className="font-mono text-[9px] text-[#718187]">{event.source}</span><span className={`flex items-center gap-1 font-mono text-xs ${event.direction === "up" ? "text-[#74b5ff]" : event.direction === "down" ? "text-[#ff9e9e]" : "text-white"}`}><DirectionIcon direction={event.direction} />{event.impact}</span></div></article>)}</div></section>;
-}
-
-function MarketBoard({ assets, tab, onTab, selectedId, onSelect }: { assets: Asset[]; tab: "all" | AssetKind; onTab: (tab: "all" | AssetKind) => void; selectedId: string; onSelect: (id: string) => void }) {
-  return <section className="panel-card overflow-hidden"><div className="flex items-center justify-between border-b border-white/[.09] px-5 py-4"><div><p className="eyebrow">MARKET BOARD</p><p className="mt-1 text-sm text-[#a6b5b7]">ニュースのあとで選ぶ、架空の銘柄群</p></div><div className="flex rounded-lg border border-white/[.08] bg-black/10 p-1">{(["all", "Stock", "Crypto"] as const).map((filter) => <button key={filter} onClick={() => onTab(filter)} className={`rounded-md px-2.5 py-1.5 font-mono text-[9px] transition ${tab === filter ? "bg-white/[.1] text-white" : "text-[#718187] hover:text-white"}`}>{filter === "all" ? "ALL" : filter.toUpperCase()}</button>)}</div></div><div className="overflow-x-auto"><table className="w-full min-w-[600px] text-left"><thead><tr className="border-b border-white/[.06] font-mono text-[9px] tracking-[.12em] text-[#708085]"><th className="px-5 py-3 font-normal">INSTRUMENT</th><th className="px-4 py-3 font-normal">THESIS</th><th className="px-4 py-3 text-right font-normal">LAST</th><th className="px-5 py-3 text-right font-normal">DAY</th></tr></thead><tbody>{assets.map((asset) => <tr key={asset.id} onClick={() => onSelect(asset.id)} className={`group cursor-pointer border-b border-white/[.055] transition last:border-0 ${selectedId === asset.id ? "bg-[#4f9bff]/[.08]" : "hover:bg-[#4f9bff]/[.035]"}`}><td className="px-5 py-3.5"><div className="flex items-center gap-3"><span className={`h-2 w-2 rounded-full ${asset.change >= 0 ? "bg-[#36d399]" : "bg-[#ff7474]"}`} /><div><p className="font-display text-sm font-medium text-white">{asset.code}<span className="ml-2 font-mono text-[9px] font-normal text-[#697a7f]">{asset.kind}</span></p><p className="text-[11px] text-[#829196]">{asset.name}</p></div></div></td><td className="px-4 py-3.5"><span className="rounded-sm bg-white/[.055] px-2 py-1 font-mono text-[9px] text-[#afbbbc]">{asset.signal}</span></td><td className="px-4 py-3.5 text-right font-mono text-sm text-white">{formatPrice(asset)}</td><td className="px-5 py-3.5 text-right"><ChangePill change={asset.change} /></td></tr>)}</tbody></table></div></section>;
-}
-
-function CatalystCard({ event, assetId }: { event: MarketEvent; assetId: string }) {
-  const effect = event.effect[assetId] ?? 0;
-  const isUp = effect >= 0;
-  return <div className="p-5"><div className="flex items-start justify-between gap-3"><div><p className={`font-mono text-[9px] tracking-[.12em] ${isUp ? "text-[#5ee8b0]" : "text-[#ff9e9e]"}`}>{event.tag}</p><h3 className="mt-2 font-display text-sm font-medium leading-snug text-white">{event.title}</h3></div><span className={`mt-1 flex shrink-0 items-center gap-1 font-mono text-[11px] ${isUp ? "text-[#5ee8b0]" : "text-[#ff9e9e]"}`}><DirectionIcon direction={isUp ? "up" : "down"} />{isUp ? "+" : ""}{(effect * 100).toFixed(1)}%</span></div><div className="mt-4 flex items-center gap-3"><div className="h-1 flex-1 overflow-hidden rounded-full bg-white/[.08]"><div className={`h-full rounded-full ${isUp ? "bg-[#36d399]" : "bg-[#ff7474]"}`} style={{ width: `${event.impact}%` }} /></div><span className="font-mono text-[9px] text-[#849398]">IMPACT {event.impact}</span></div></div>;
-}
-
-function MiniStat({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "neutral" | "lime" | "coral" }) {
-  return <div className="min-w-0 border-r border-white/[.09] px-3 py-4 last:border-r-0"><p className="truncate font-mono text-[8px] tracking-[.11em] text-[#718187]">{label}</p><p className={`mt-1 truncate font-mono text-[11px] ${tone === "lime" ? "text-[#c9f34a]" : tone === "coral" ? "text-[#ff917f]" : "text-white"}`}>{value}</p></div>;
-}
-
-function AssetOverview({ cash, marketValue, equity, pnl, positions }: { cash: number; marketValue: number; equity: number; pnl: number; positions: Array<{ asset?: Asset; quantity: number; avgCost: number; value: number; pnl: number }> }) {
-  return <section className="mt-5 overflow-hidden rounded-2xl border border-[#4f9bff]/25 bg-[linear-gradient(100deg,rgba(79,155,255,.14),rgba(13,26,30,.92)_58%,rgba(79,155,255,.05))] shadow-[0_18px_36px_rgba(0,0,0,.12)]"><div className="grid gap-0 min-[760px]:grid-cols-[1.15fr_.85fr]"><div className="p-5 sm:p-6"><div className="flex items-center justify-between"><div><p className="eyebrow text-[#74b5ff]">MY MONEY / いま使えるお金</p><p className="mt-1 font-display text-lg font-semibold text-white">合計資産</p></div><Banknote size={22} className="text-[#74b5ff]" /></div><p className="mt-3 font-mono text-4xl font-medium tracking-[-.07em] text-white">{formatMoney(equity, 0)}</p><div className="mt-5 grid grid-cols-3 gap-2"><MoneyTile label="手元資金" value={formatMoney(cash, 0)} accent="blue" /><MoneyTile label="保有資産" value={formatMoney(marketValue, 0)} accent="blue" /><MoneyTile label="含み損益" value={`${pnl >= 0 ? "+" : ""}${formatMoney(pnl, 0)}`} accent={pnl >= 0 ? "green" : "red"} /></div></div><div className="border-t border-white/[.09] bg-black/[.12] p-5 min-[760px]:border-l min-[760px]:border-t-0 sm:p-6"><div className="flex items-center justify-between"><div><p className="eyebrow">PORTFOLIO / 保有中</p><p className="mt-1 text-sm text-[#c3d0cc]">いま持っている銘柄の価値</p></div><span className="rounded-full bg-[#4f9bff]/[.12] px-2.5 py-1 font-mono text-[9px] text-[#74b5ff]">{positions.length} HOLDING</span></div>{positions.length === 0 ? <div className="mt-4 rounded-lg border border-dashed border-white/[.14] px-4 py-4 text-sm leading-relaxed text-[#93a4a5]">まだ保有している銘柄はありません。気になる銘柄を選んで、少額から試してみよう。</div> : <div className="mt-4 space-y-2">{positions.slice(0, 3).map((position) => position.asset && <div key={position.asset.id} className="flex items-center justify-between rounded-lg bg-white/[.045] px-3 py-2.5"><div><p className="font-display text-sm font-semibold text-white">{position.asset.code}<span className="ml-2 font-mono text-[9px] font-normal text-[#849599]">{position.quantity} UNIT</span></p><p className="font-mono text-[10px] text-[#8d9c9f]">平均 {formatMoney(position.avgCost, position.asset.kind === "Crypto" ? 3 : 2)}</p></div><div className="text-right"><p className="font-mono text-sm text-[#74b5ff]">{formatMoney(position.value, 0)}</p><p className={`font-mono text-[10px] ${position.pnl >= 0 ? "text-[#36d399]" : "text-[#ff7474]"}`}>{position.pnl >= 0 ? "+" : ""}{formatMoney(position.pnl, 0)}</p></div></div>)}</div>}</div></div></section>;
-}
-
-function MoneyTile({ label, value, accent }: { label: string; value: string; accent: "blue" | "green" | "red" }) {
-  const colors = { blue: "border-[#4f9bff]/28 bg-[#4f9bff]/[.08] text-[#74b5ff]", green: "border-[#36d399]/28 bg-[#36d399]/[.08] text-[#36d399]", red: "border-[#ff7474]/28 bg-[#ff7474]/[.08] text-[#ff9292]" };
-  return <div className={`min-w-0 rounded-lg border p-2.5 ${colors[accent]}`}><p className="font-mono text-[8px] tracking-[.1em] opacity-75">{label}</p><p className="mt-1 truncate font-mono text-[11px] font-medium text-white">{value}</p></div>;
-}
-
-function SaveStatusPanel({ savedAt, onSave, onReset }: { savedAt: number | null; onSave: () => void; onReset: () => void }) {
-  const label = savedAt ? new Date(savedAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "保存準備中";
-  return <section className="mt-4 flex flex-col gap-3 border-y border-[#4f9bff]/18 bg-[#4f9bff]/[.045] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><span className="grid h-8 w-8 place-items-center rounded-lg border border-[#4f9bff]/30 bg-[#4f9bff]/[.1] text-[#8fc5ff]"><Save size={15} /></span><div><p className="font-mono text-[10px] tracking-[.12em] text-[#8fc5ff]">LOCAL SAVE / AUTO ON</p><p className="mt-0.5 text-[11px] text-[#a9b9b9]">最終保存: {label} · このブラウザの端末内に保存されます。</p></div></div><div className="flex gap-2"><button type="button" onClick={onSave} className="rounded-md border border-[#4f9bff]/35 bg-[#4f9bff]/[.1] px-3 py-2 font-mono text-[9px] text-[#9bcaff] transition hover:bg-[#4f9bff]/[.2]">SAVE NOW</button><button type="button" onClick={onReset} className="flex items-center gap-1 rounded-md px-2 py-2 font-mono text-[9px] text-[#84969a] transition hover:bg-white/[.06] hover:text-[#ff9e9e]"><RotateCcw size={12} /> RESET</button></div></section>;
-}
-
-function ArchiveOpeningOverlay({ pack, result }: { pack: GachaPack; result: Reward | null }) {
-  const rarity = result?.rarity ?? "COMMON";
-  const accent = result?.accent ?? pack.accent;
-  const elevated = rarity === "MYTHIC" || rarity === "LIMITED";
-  const steps = rarity === "LIMITED" ? ["SEAL", "SCAN", "SIGNATURE", "REVEAL"] : ["SEAL", "SCAN", "REVEAL"];
-  return <div className={`archive-overlay fixed inset-0 z-[80] grid place-items-center bg-[#020709]/86 p-5 backdrop-blur-md rarity-${rarity.toLowerCase()}`}>
-    <div className="archive-opening relative w-full max-w-md overflow-hidden rounded-2xl border p-7 text-center shadow-2xl" style={{ borderColor: `${accent}88`, backgroundColor: "#0b1519" }}>
-      {elevated && <div className="archive-sigil absolute inset-0" style={{ borderColor: `${accent}88` }} />}
-      <div className="archive-opening-scan absolute inset-x-0 top-0 h-px" style={{ backgroundColor: accent }} />
-      <div className="absolute inset-0 opacity-30" style={{ backgroundImage: `radial-gradient(circle at 50% 0%, ${accent}66 0%, transparent 58%)` }} />
-      <div className="relative"><p className="font-mono text-[10px] tracking-[.2em]" style={{ color: accent }}>{rarity === "LIMITED" ? "LIMITED SIGNATURE DETECTED" : `SEAL BREAKING / ${pack.kicker}`}</p><div className="archive-opening-core mx-auto mt-7 grid h-24 w-24 place-items-center rounded-2xl border" style={{ color: accent, borderColor: `${accent}66`, backgroundColor: `${accent}16` }}><RewardIcon type={result?.icon ?? pack.icon} /></div><p className="mt-6 font-display text-2xl font-semibold text-white">{rarity === "LIMITED" ? "SIGNATURE UNLOCK" : "ARCHIVE UNSEALING"}</p><p className="mt-1 font-mono text-[10px] tracking-[.2em]" style={{ color: accent }}>{rarity}</p><div className="mx-auto mt-6 flex max-w-[300px] items-center justify-between gap-2">{steps.map((step, index) => <div key={step} className="flex items-center gap-2"><span className="grid h-6 w-6 place-items-center rounded-full border font-mono text-[9px]" style={{ color: accent, borderColor: `${accent}88`, backgroundColor: `${accent}12` }}>{index + 1}</span><span className="font-mono text-[8px] tracking-[.08em] text-[#a9babd]">{step}</span>{index < steps.length - 1 && <span className="h-px w-3 bg-white/15" />}</div>)}</div><p className="mt-6 font-mono text-[10px] text-[#93a6aa]">{rarity === "LIMITED" ? "季節限定シグネチャを照合中…" : elevated ? "高レア・フローを同期中…" : "解析中… レアリティを確認しています。"}</p></div>
+function RegionInspector({
+  game,
+  region,
+  onUnlock,
+  onOpenMachine,
+  onViewChange,
+}: {
+  game: GameData;
+  region: Region;
+  onUnlock: (region: Region) => void;
+  onOpenMachine: (id: MachineId) => void;
+  onViewChange: (view: View) => void;
+}) {
+  const active = game.unlockedRegions.includes(region.id);
+  const Icon = region.icon;
+  const canAfford = game.cash >= region.cost;
+  return (
+    <div className="inspector-body">
+      <div className="inspector-kicker">
+        <span>REGIONAL SITE / {region.zone}</span>
+        <span className={`site-status ${active ? "site-open" : "site-locked"}`}>
+          <i />
+          {active ? "OPERATIONAL" : "UNOPENED"}
+        </span>
+      </div>
+      <div className="region-hero">
+        <div className={`region-emblem ${active ? "emblem-open" : ""}`}>
+          <Icon size={23} strokeWidth={1.6} />
+          <span>{region.prefecture.slice(0, 2)}</span>
+        </div>
+        <div>
+          <div className="region-prefecture">{region.prefecture} / JAPAN</div>
+          <h3>{region.city}</h3>
+          <p>{region.role}</p>
+        </div>
+      </div>
+      <p className="region-description">{region.detail}</p>
+      <div className={`region-effect ${active ? "effect-live" : ""}`}>
+        <div className="effect-label">
+          <Sparkles size={12} /> NETWORK EFFECT
+        </div>
+        <strong>{region.effect}</strong>
+        <span>
+          {active
+            ? "接続済み — 効果は自動で適用中"
+            : "拠点開設後、ネットワークに自動で反映"}
+        </span>
+      </div>
+      <div className="region-meta-grid">
+        <div>
+          <span>REGIONAL ZONE</span>
+          <b>{region.zone}</b>
+        </div>
+        <div>
+          <span>LINK TO TSUKUBA</span>
+          <b>{active ? "CONNECTED" : "— — —"}</b>
+        </div>
+      </div>
+      {active ? (
+        <button
+          type="button"
+          className="action-button action-secondary full-action"
+          onClick={() => {
+            onOpenMachine(region.linkedMachine);
+            onViewChange("factory");
+          }}
+        >
+          <MachineIcon id={region.linkedMachine} size={15} />
+          関連設備を調整する
+          <ArrowRight size={15} />
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="action-button action-primary full-action"
+          disabled={!canAfford}
+          onClick={() => onUnlock(region)}
+        >
+          <MapPin size={15} />
+          {canAfford
+            ? `拠点を開設 · ${formatYen(region.cost)}`
+            : `あと ${formatYen(region.cost - game.cash)} 必要`}
+          <ArrowRight size={15} />
+        </button>
+      )}
+      {!active && (
+        <div className="unlock-note">
+          <LockIcon /> 日本列島に新しい生産・販売ルートが開通します
+        </div>
+      )}
     </div>
-  </div>;
+  );
 }
 
-function ArchiveModuleRack({ archive, activeArchive, activeEffect, onActivate, onDeactivate, candles, catalysts }: { archive: Reward[]; activeArchive: Reward | null; activeEffect: ArchiveEffect | null; onActivate: (reward: Reward) => void; onDeactivate: () => void; candles: Candle[]; catalysts: MarketEvent[] }) {
-  const range = candles.length ? ((Math.max(...candles.map((candle) => candle.high)) - Math.min(...candles.map((candle) => candle.low))) / Math.max(0.01, candles.at(-1)?.close ?? 1)) * 100 : 0;
-  const insight = activeEffect?.key === "credit" ? "次の売買では、通常のCreditに +5 が追加されます。" : activeEffect?.key === "news" ? `注目ニュース: ${catalysts[0]?.title ?? "選択中銘柄へのニュースを待機中"}` : activeEffect?.key === "range" ? `直近レンジ: ${range.toFixed(2)}% — 数字が大きいほど、いまの動きが大きめです。` : activeEffect?.key === "brief" ? `いまの要因: ${catalysts[0]?.copy ?? "選択中銘柄への材料を待機中"}` : activeEffect?.key === "bot" ? "BOT LINK: BOT注文は市場へ影響します。このモジュールでは、その注文フローと自分の判断を比較できます。アーカイブ自体は市場を変えません。" : "アーカイブを入手すると、ここで市場を変えない分析モジュールとして使えます。";
-  return <section className="mt-5 overflow-hidden rounded-2xl border border-[#4f9bff]/25 bg-[#0b1519]"><div className="flex flex-col gap-4 border-b border-white/[.08] px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="eyebrow text-[#74b5ff]">ARCHIVE MODULE / 効果を選ぶ</p><p className="mt-1 font-display text-lg font-semibold text-white">入手記録を、分析に使う。</p><p className="mt-1 text-[11px] leading-relaxed text-[#84979a]">どの効果も価格・ニュース・約定には影響しません。</p></div>{activeArchive ? <button type="button" onClick={onDeactivate} className="rounded-lg border border-[#4f9bff]/30 bg-[#4f9bff]/[.09] px-3 py-2 font-mono text-[10px] text-[#9bcaff] transition hover:bg-[#4f9bff]/[.16]">EJECT MODULE</button> : <span className="rounded-lg border border-white/[.1] bg-white/[.04] px-3 py-2 font-mono text-[10px] text-[#8ca0a3]">NO MODULE</span>}</div>{activeArchive && activeEffect ? <div className="grid gap-3 border-b border-white/[.07] bg-[#4f9bff]/[.06] p-4 sm:grid-cols-[auto_1fr]"><span className="grid h-10 w-10 place-items-center rounded-lg" style={{ color: RARITY_META[activeArchive.rarity].color, backgroundColor: RARITY_META[activeArchive.rarity].background }}><RewardIcon type={activeArchive.icon} /></span><div><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-[10px] tracking-[.12em] text-[#8fc5ff]">ACTIVE / {activeEffect.label}</span><span className="rounded border px-1.5 py-0.5 font-mono text-[8px]" style={{ color: RARITY_META[activeArchive.rarity].color, borderColor: RARITY_META[activeArchive.rarity].border }}>{activeArchive.rarity}</span></div><p className="mt-1 text-sm font-medium text-white">{activeArchive.name}</p><p className="mt-1 text-[11px] leading-relaxed text-[#b7c8ca]">{insight}</p></div></div> : null}<div className="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-4">{archive.length === 0 ? <p className="sm:col-span-2 lg:col-span-4 text-sm text-[#8ca0a3]">まだ使えるアーカイブはありません。ガチャで入手すると、有効化ボタンがここに表示されます。</p> : archive.slice(0, 4).map((reward, index) => { const effect = ARCHIVE_EFFECTS[reward.rarity]; const active = activeArchive?.id === reward.id; return <div key={`${reward.id}-${index}`} className={`rounded-xl border p-3 ${active ? "border-[#4f9bff]/50 bg-[#4f9bff]/[.1]" : "border-white/[.09] bg-white/[.025]"}`}><div className="flex items-center justify-between gap-2"><span className="font-mono text-[9px]" style={{ color: RARITY_META[reward.rarity].color }}>{reward.rarity}</span><RewardIcon type={reward.icon} /></div><p className="mt-3 font-display text-sm font-semibold text-white">{reward.name}</p><p className="mt-1 min-h-[32px] text-[10px] leading-relaxed text-[#90a4a6]">{effect.label}: {effect.description}</p><button type="button" onClick={() => onActivate(reward)} className={`mt-3 w-full rounded-md px-2 py-2 font-mono text-[9px] tracking-[.08em] transition ${active ? "bg-[#4f9bff] text-white" : "border border-[#4f9bff]/30 text-[#8fc5ff] hover:bg-[#4f9bff]/[.12]"}`}>{active ? "ACTIVE" : "ACTIVATE"}</button></div>; })}</div></section>;
+function LockIcon() {
+  return <LockKeyhole className="lock-glyph" size={12} />;
 }
 
-function SeriesCollectionDeck({ series }: { series: SeriesProgress[] }) {
-  return <section className="mt-6 overflow-hidden rounded-2xl border border-[#4f9bff]/25 bg-[#0b1519]"><div className="flex flex-col justify-between gap-3 border-b border-white/[.08] px-5 py-5 sm:flex-row sm:items-center sm:px-6"><div><p className="eyebrow text-[#74b5ff]">LIMITED SERIES / PACK COLLECTION</p><h2 className="mt-1 font-display text-xl font-semibold text-white">パック限定シリーズ</h2><p className="mt-1 text-xs text-[#8ea0a4]">各パックの4アイテムを集めると、そのシリーズはCOMPLETEになります。</p></div><span className="rounded-lg border border-[#4f9bff]/25 bg-[#4f9bff]/[.08] px-3 py-2 font-mono text-[10px] text-[#8fc5ff]">5 SERIES</span></div><div className="grid gap-px bg-white/[.07] sm:grid-cols-2 lg:grid-cols-5">{series.map((entry) => <article key={entry.pack.id} className="bg-[#0b1519] p-4"><div className="flex items-center justify-between"><span className="font-mono text-[9px] tracking-[.12em]" style={{ color: entry.pack.accent }}>{entry.pack.kicker}</span><span className={`rounded border px-1.5 py-0.5 font-mono text-[8px] ${entry.complete ? "border-[#5ee8b0]/45 bg-[#5ee8b0]/[.1] text-[#5ee8b0]" : "border-white/[.12] text-[#789095]"}`}>{entry.complete ? "COMPLETE" : `${entry.owned}/${entry.total}`}</span></div><h3 className="mt-4 font-display text-base font-semibold text-white">{entry.title}</h3><p className="mt-1 min-h-[34px] text-[10px] leading-relaxed text-[#8ea0a4]">{entry.subtitle}</p><div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/[.08]"><div className="h-full rounded-full" style={{ width: `${(entry.owned / entry.total) * 100}%`, backgroundColor: entry.pack.accent }} /></div><p className="mt-2 font-mono text-[9px] text-[#788b8f]">{entry.owned === 0 ? "未収集" : entry.complete ? "SERIES COMPLETE" : `あと ${entry.total - entry.owned} ITEM`}</p></article>)}</div></section>;
+function MachineInspector({
+  game,
+  machineId,
+  onUpgrade,
+  onToggle,
+}: {
+  game: GameData;
+  machineId: MachineId;
+  onUpgrade: (id: MachineId) => void;
+  onToggle: (id: MachineId) => void;
+}) {
+  const machine = MACHINES.find(item => item.id === machineId) ?? MACHINES[4];
+  const level = game.levels[machineId];
+  const enabled = game.machineOn[machineId];
+  const cost = machineUpgradeCost(game, machineId);
+  const canUpgrade = game.cash >= cost && level < MAX_LEVEL;
+  const effect = getMachineEffect(game, machineId);
+  const Icon = machine.icon;
+  return (
+    <div className="inspector-body machine-inspector">
+      <div className="inspector-kicker">
+        <span>LINE CONTROL / TSUKUBA</span>
+        <span
+          className={`site-status ${enabled ? "site-open" : "site-locked"}`}
+        >
+          <i />
+          {enabled ? "RUNNING" : "STOPPED"}
+        </span>
+      </div>
+      <div className="machine-hero">
+        <div className={`machine-big-icon icon-${machineId}`}>
+          <Icon size={24} strokeWidth={1.6} />
+        </div>
+        <div>
+          <div className="machine-subtitle">
+            {machine.english} / {machine.area.split(" / ")[0]}
+          </div>
+          <h3>{machine.name}</h3>
+          <p>
+            TSUKUBA PLANT · UNIT 0
+            {MACHINES.findIndex(item => item.id === machineId) + 1}
+          </p>
+        </div>
+      </div>
+      <div className="level-display">
+        <div>
+          <span>UPGRADE LEVEL</span>
+          <b>
+            LV.{level}
+            <small> / {MAX_LEVEL}</small>
+          </b>
+        </div>
+        <div className="level-pips">
+          {Array.from({ length: MAX_LEVEL }, (_, index) => (
+            <i key={index} className={index < level ? "pip-filled" : ""} />
+          ))}
+        </div>
+      </div>
+      <div className="machine-output-card">
+        <div className="effect-label">
+          <Zap size={12} /> CURRENT OUTPUT
+        </div>
+        <strong>{effect.current}</strong>
+        <span>{effect.next}</span>
+      </div>
+      <div className="machine-control-row">
+        <div>
+          <span>自動運転</span>
+          <small>
+            {enabled ? "素材があれば生産を継続" : "この工程は停止中"}
+          </small>
+        </div>
+        <button
+          type="button"
+          className={`toggle-switch ${enabled ? "toggle-on" : ""}`}
+          role="switch"
+          aria-checked={enabled}
+          aria-label={`${machine.name}の自動運転を${enabled ? "停止" : "開始"}`}
+          onClick={() => onToggle(machineId)}
+        >
+          <span />
+        </button>
+      </div>
+      <button
+        type="button"
+        className="action-button action-primary full-action upgrade-button"
+        disabled={!canUpgrade}
+        onClick={() => onUpgrade(machineId)}
+      >
+        {level >= MAX_LEVEL ? <Check size={15} /> : <ArrowUpRight size={15} />}
+        {level >= MAX_LEVEL
+          ? "MAX LEVEL · 強化済み"
+          : `設備をアップグレード · ${formatYen(cost)}`}
+        {level < MAX_LEVEL && <ArrowRight size={15} />}
+      </button>
+      {level < MAX_LEVEL && (
+        <div className="upgrade-note">
+          <span>次のレベル</span>
+          <b>{effect.nextShort}</b>
+        </div>
+      )}
+      {level >= MAX_LEVEL && (
+        <div className="upgrade-note">
+          <Check size={13} />
+          <b>この設備は最大レベルです</b>
+        </div>
+      )}
+    </div>
+  );
 }
 
-function SharedRoomPanel({ playerName, roomCode, roomStatus, participants, activity, onPlayerName, onRoomCode, onConnect, onDisconnect }: { playerName: string; roomCode: string; roomStatus: RoomStatus; participants: RoomParticipant[]; activity: RoomActivity[]; onPlayerName: (value: string) => void; onRoomCode: (value: string) => void; onConnect: () => void; onDisconnect: () => void }) {
-  const connected = roomStatus === "connected";
-  const statusLabel = roomStatus === "connected" ? "ONLINE" : roomStatus === "connecting" ? "CONNECTING" : roomStatus === "setup" ? "ENDPOINT NEEDED" : "OFFLINE";
-  const statusColor = connected ? "text-[#5ee8b0] border-[#5ee8b0]/35 bg-[#5ee8b0]/[.08]" : roomStatus === "connecting" ? "text-[#8fc5ff] border-[#4f9bff]/35 bg-[#4f9bff]/[.08]" : "text-[#a3b1b5] border-white/[.12] bg-white/[.04]";
-  return <section className="mt-6 overflow-hidden rounded-2xl border border-[#4f9bff]/25 bg-[#0b1519]"><div className="flex flex-col justify-between gap-4 border-b border-white/[.08] px-5 py-5 sm:flex-row sm:items-center sm:px-6"><div><p className="eyebrow text-[#74b5ff]">SHARED ROOM / ONLINE PULSE</p><h2 className="mt-1 font-display text-xl font-semibold text-white">みんなの市場デスク</h2><p className="mt-1 text-xs text-[#8ea0a4]">参加、開封、売買の要約だけを共有します。価格や排出率は共有されません。</p></div><span className={`rounded-lg border px-3 py-2 font-mono text-[10px] ${statusColor}`}>{statusLabel}</span></div><div className="grid gap-0 lg:grid-cols-[.78fr_1.22fr]"><div className="border-b border-white/[.08] p-5 lg:border-b-0 lg:border-r"><div className="grid gap-3"><label><span className="eyebrow">PLAYER NAME</span><input value={playerName} onChange={(event) => onPlayerName(event.target.value)} maxLength={20} className="mt-2 w-full rounded-lg border border-white/[.12] bg-black/15 px-3 py-2.5 font-mono text-xs text-white outline-none transition focus:border-[#4f9bff]" /></label><label><span className="eyebrow">ROOM CODE</span><input value={roomCode} onChange={(event) => onRoomCode(event.target.value.toUpperCase())} maxLength={20} className="mt-2 w-full rounded-lg border border-white/[.12] bg-black/15 px-3 py-2.5 font-mono text-xs text-white outline-none transition focus:border-[#4f9bff]" /></label>{connected ? <Button onClick={onDisconnect} variant="outline" className="mt-1 h-10 border-[#ff7474]/35 bg-[#ff7474]/[.06] font-display text-[10px] tracking-[.1em] text-[#ff9e9e] hover:bg-[#ff7474]/[.14] hover:text-white">LEAVE ROOM</Button> : <Button onClick={onConnect} disabled={roomStatus === "connecting"} className="mt-1 h-10 bg-[#4f9bff] font-display text-[10px] tracking-[.1em] text-white hover:bg-[#72b2ff]">{roomStatus === "connecting" ? "CONNECTING..." : "CONNECT ROOM"}</Button>}</div><p className="mt-4 text-[10px] leading-relaxed text-[#71858a]">Cloudflare公開時に <span className="font-mono text-[#8fc5ff]">VITE_ROOM_WS_URL</span> を設定すると、同じルームコードの参加者と即時同期します。</p></div><div className="p-5"><div className="flex items-center justify-between"><div><p className="eyebrow">ROOM ACTIVITY</p><p className="mt-1 text-sm text-[#c4d2d1]">参加者 {connected ? Math.max(1, participants.length) : 1} 名</p></div><Globe2 size={18} className="text-[#74b5ff]" /></div><div className="mt-4 divide-y divide-white/[.07] rounded-lg border border-white/[.08] bg-black/10">{activity.length === 0 ? <div className="px-4 py-5 text-sm leading-relaxed text-[#84979b]">接続すると、このルームの参加・開封・売買の要約がここに流れます。</div> : activity.map((entry) => <div key={entry.id} className="flex items-center justify-between gap-3 px-4 py-3"><p className="min-w-0 truncate text-xs text-white"><span className="mr-2 font-mono text-[10px] text-[#8fc5ff]">{entry.player}</span>{entry.action}</p><span className="shrink-0 font-mono text-[9px] text-[#75888c]">{new Date(entry.createdAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}</span></div>)}</div></div></div></section>;
+function getMachineEffect(
+  game: GameData,
+  id: MachineId
+): { current: string; next: string; nextShort: string } {
+  const level = game.levels[id];
+  if (id === "supply")
+    return {
+      current: `+${1 + level + (game.unlockedRegions.includes("sapporo") ? 1 : 0)} 鋼材 / cycle`,
+      next: `次の強化で鋼材供給が +1 / cycle`,
+      nextShort: `鋼材 +${2 + level + (game.unlockedRegions.includes("sapporo") ? 1 : 0)} / cycle`,
+    };
+  if (id === "press")
+    return {
+      current: `約${periodFor(game, id)} cycle ごとにシャシー`,
+      next: `生産周期を短縮。群馬拠点で追加成形`,
+      nextShort: `周期 ${Math.max(2, 4 - level)} cycle`,
+    };
+  if (id === "engine")
+    return {
+      current: `約${periodFor(game, id)} cycle ごとにエンジン`,
+      next: `ターボユニットの組立速度を改善`,
+      nextShort: `周期 ${Math.max(2, 5 - level)} cycle`,
+    };
+  if (id === "tire")
+    return {
+      current: `約${periodFor(game, id)} cycle ごとにタイヤ`,
+      next: `ラバーラインとタイヤ成形を高速化`,
+      nextShort: `周期 ${Math.max(2, 5 - level)} cycle`,
+    };
+  if (id === "assembly")
+    return {
+      current: `約${periodFor(game, id)} cycle ごとに完成車`,
+      next: `完成車の組立サイクルを短縮`,
+      nextShort: `周期 ${Math.max(2, 6 - level)} cycle`,
+    };
+  return {
+    current: `出荷額 +${formatYen(level * 12_000)} / car`,
+    next: `熟練スタッフと港湾設備で輸出単価を改善`,
+    nextShort: `出荷額 +${formatYen((level + 1) * 12_000)} / car`,
+  };
 }
 
-function FloorLeaderboard({ playerName, level, archiveCount, missionCount, roomStatus, participants }: { playerName: string; level: number; archiveCount: number; missionCount: number; roomStatus: RoomStatus; participants: RoomParticipant[] }) {
-  const self: Required<Pick<RoomParticipant, "id" | "name" | "status" | "level" | "archiveCount" | "missionCount">> = { id: "local", name: playerName.trim() || "PULSE PLAYER", status: "online", level, archiveCount, missionCount };
-  const entries = [self, ...participants.filter((participant) => participant.id !== "local" && participant.level !== undefined)].sort((a, b) => (b.level ?? 0) - (a.level ?? 0) || (b.archiveCount ?? 0) - (a.archiveCount ?? 0));
-  const hasSharedScores = entries.length > 1;
-  return <section className="mt-6 overflow-hidden rounded-2xl border border-[#4f9bff]/25 bg-[#0b1519]"><div className="flex flex-col justify-between gap-3 border-b border-white/[.08] px-5 py-5 sm:flex-row sm:items-center sm:px-6"><div><p className="eyebrow text-[#74b5ff]">FLOOR LEADERBOARD / SAFE PROGRESS</p><h2 className="mt-1 font-display text-xl font-semibold text-white">取引フロアの進行</h2><p className="mt-1 text-xs text-[#8ea0a4]">レベル・ミッション・アーカイブ数のみを比較します。資産額と取引内容は共有しません。</p></div><span className={`rounded-lg border px-3 py-2 font-mono text-[10px] ${hasSharedScores ? "border-[#5ee8b0]/30 bg-[#5ee8b0]/[.08] text-[#5ee8b0]" : "border-white/[.12] bg-white/[.04] text-[#9aabb0]"}`}>{hasSharedScores ? "ROOM RANKING" : roomStatus === "connected" ? "WAITING FOR FLOOR DATA" : "LOCAL RECORD"}</span></div><div className="divide-y divide-white/[.07]">{entries.slice(0, 5).map((entry, index) => <div key={entry.id} className={`grid grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-3 px-5 py-4 sm:px-6 ${entry.id === "local" ? "bg-[#4f9bff]/[.055]" : ""}`}><span className={`grid h-7 w-7 place-items-center rounded-md font-mono text-[10px] ${index === 0 ? "bg-[#f6c96a]/[.14] text-[#f6c96a]" : "bg-white/[.06] text-[#9aaab0]"}`}>#{index + 1}</span><div className="min-w-0"><p className="truncate font-display text-sm font-semibold text-white">{entry.name}{entry.id === "local" && <span className="ml-2 font-mono text-[9px] font-normal text-[#8fc5ff]">YOU</span>}</p><p className="mt-0.5 font-mono text-[9px] text-[#80939a]">LEVEL {entry.level ?? "—"} · {entry.missionCount ?? 0}/3 MISSIONS</p></div><div className="text-right"><p className="font-mono text-xs text-[#c9dbdf]">{entry.archiveCount ?? 0} ITEM</p><p className="mt-0.5 font-mono text-[9px] text-[#73878d]">ARCHIVE</p></div></div>)}</div></section>;
+function DetailInspector({
+  game,
+  region,
+  selectedMachine,
+  detailTab,
+  onTab,
+  onUnlock,
+  onOpenMachine,
+  onViewChange,
+  onUpgrade,
+  onToggle,
+}: {
+  game: GameData;
+  region: Region;
+  selectedMachine: MachineId;
+  detailTab: DetailTab;
+  onTab: (tab: DetailTab) => void;
+  onUnlock: (region: Region) => void;
+  onOpenMachine: (id: MachineId) => void;
+  onViewChange: (view: View) => void;
+  onUpgrade: (id: MachineId) => void;
+  onToggle: (id: MachineId) => void;
+}) {
+  return (
+    <section className="panel inspector-panel">
+      <div className="inspector-tabs">
+        <button
+          type="button"
+          className={detailTab === "region" ? "tab-active" : ""}
+          onClick={() => onTab("region")}
+        >
+          <MapPin size={13} />
+          拠点
+        </button>
+        <button
+          type="button"
+          className={detailTab === "machine" ? "tab-active" : ""}
+          onClick={() => onTab("machine")}
+        >
+          <Cog size={13} />
+          設備管理
+        </button>
+      </div>
+      {detailTab === "region" ? (
+        <RegionInspector
+          game={game}
+          region={region}
+          onUnlock={onUnlock}
+          onOpenMachine={onOpenMachine}
+          onViewChange={onViewChange}
+        />
+      ) : (
+        <MachineInspector
+          game={game}
+          machineId={selectedMachine}
+          onUpgrade={onUpgrade}
+          onToggle={onToggle}
+        />
+      )}
+    </section>
+  );
 }
 
-function ArchiveVault({ archive, activeFilter, onFilter, totalCount, shards, onCraft }: { archive: Reward[]; activeFilter: "ALL" | Reward["rarity"]; onFilter: (filter: "ALL" | Reward["rarity"]) => void; totalCount: number; shards: number; onCraft: () => void }) {
-  const filters: Array<"ALL" | Reward["rarity"]> = ["ALL", "COMMON", "RARE", "EPIC", "LEGEND", "MYTHIC", "LIMITED"];
-  return <section className="mt-6 overflow-hidden rounded-2xl border border-[#4f9bff]/25 bg-[#0b1519] shadow-[0_18px_36px_rgba(0,0,0,.12)]"><div className="flex flex-col justify-between gap-4 border-b border-white/[.08] px-5 py-5 sm:flex-row sm:items-center sm:px-6"><div><p className="eyebrow text-[#74b5ff]">MY ARCHIVE / 入手アイテム管理</p><h2 className="mt-1 font-display text-xl font-semibold text-white">獲得アーカイブ</h2><p className="mt-1 text-xs text-[#8ea0a4]">ガチャで入手した記録を、レアリティごとに確認できます。</p></div><div className="rounded-lg border border-[#4f9bff]/20 bg-[#4f9bff]/[.08] px-3 py-2 font-mono text-xs text-[#8fc5ff]">TOTAL {totalCount} ITEM</div></div><div className="flex flex-wrap gap-2 border-b border-white/[.07] px-5 py-3 sm:px-6">{filters.map((filter) => { const meta = filter === "ALL" ? { label: "ALL", color: "#8fc5ff", border: "#4f9bff55", background: "#4f9bff12" } : RARITY_META[filter]; return <button key={filter} type="button" onClick={() => onFilter(filter)} className={`rounded-md border px-2.5 py-1.5 font-mono text-[10px] transition ${activeFilter === filter ? "shadow-[inset_0_0_0_1px_currentColor]" : "opacity-65 hover:opacity-100"}`} style={{ color: meta.color, borderColor: meta.border, backgroundColor: activeFilter === filter ? meta.background : "transparent" }}>{meta.label}{filter !== "ALL" && <span className="ml-1 opacity-75">{RARITY_META[filter].rate}</span>}</button>; })}</div>{archive.length === 0 ? <div className="grid min-h-36 place-items-center px-6 py-10 text-center"><div><Archive size={22} className="mx-auto text-[#4f9bff]" /><p className="mt-3 font-display text-base font-medium text-white">アーカイブはまだ空です。</p><p className="mt-1 text-xs text-[#84969a]">パックを開封すると、ここでレアリティ別に管理できます。</p></div></div> : <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-4 sm:p-6">{archive.map((reward, index) => { const meta = RARITY_META[reward.rarity]; return <article key={`${reward.id}-${index}`} className="group relative overflow-hidden rounded-xl border bg-white/[.025] p-4 transition hover:-translate-y-0.5" style={{ borderColor: meta.border }}><div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: meta.color }} /><div className="flex items-start justify-between gap-3"><span className="grid h-9 w-9 place-items-center rounded-lg" style={{ backgroundColor: meta.background, color: meta.color }}><RewardIcon type={reward.icon} /></span><span className="rounded-md border px-2 py-1 font-mono text-[9px] tracking-[.08em]" style={{ color: meta.color, borderColor: meta.border, backgroundColor: meta.background }}>{meta.label}</span></div><h3 className="mt-4 font-display text-base font-semibold text-white">{reward.name}</h3><p className="mt-1 text-[11px] leading-relaxed text-[#94a5a8]">{reward.detail}</p><p className="mt-4 font-mono text-[9px] text-[#6f8388]">ARCHIVE #{String(totalCount - index).padStart(3, "0")}</p></article>; })}</div>}</section>;
+function ContractPanel({
+  game,
+  onShip,
+  onClaim,
+}: {
+  game: GameData;
+  onShip: () => void;
+  onClaim: () => void;
+}) {
+  const goal = 3;
+  const progress = Math.min(game.shipments, goal);
+  const complete = game.shipments >= goal;
+  const claimable = complete && !game.contractClaimed;
+  const dispatchReady =
+    game.stock.cars > 0 &&
+    game.machineOn.dispatch &&
+    game.unlockedRegions.includes("yokohama");
+  return (
+    <section className="panel contract-panel">
+      <div className="contract-top">
+        <div className="eyebrow">ACTIVE CONTRACT / 01</div>
+        <span className="contract-timer">
+          <Clock3 size={12} /> DUE {formatCountdown(game.tick)}
+        </span>
+      </div>
+      <div className="contract-title-row">
+        <span className="contract-stamp">峠</span>
+        <div>
+          <h3>WEEKEND TOUGE RUN</h3>
+          <p>週末の峠ミーティングへ3台納車</p>
+        </div>
+      </div>
+      <div className="contract-progress-label">
+        <span>DELIVERY TARGET</span>
+        <b>
+          {String(progress).padStart(2, "0")} <i>/</i> 03
+        </b>
+      </div>
+      <div className="contract-progress">
+        <span style={{ width: `${(progress / goal) * 100}%` }} />
+      </div>
+      <div className="contract-reward">
+        <span>
+          <Sparkles size={13} /> CONTRACT REWARD
+        </span>
+        <b>
+          ¥180,000 <i>+ 75 REP</i>
+        </b>
+      </div>
+      {claimable ? (
+        <button
+          type="button"
+          className="action-button action-primary full-action"
+          onClick={onClaim}
+        >
+          <Check size={15} />
+          報酬を受け取る
+          <ArrowRight size={15} />
+        </button>
+      ) : game.contractClaimed ? (
+        <div className="contract-complete">
+          <Check size={14} /> CONTRACT COMPLETE <span>次の契約は準備中</span>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="action-button action-secondary full-action ship-action"
+          onClick={onShip}
+          disabled={!dispatchReady}
+        >
+          <Ship size={15} />
+          {game.stock.cars > 0
+            ? `横浜へ ${game.stock.cars} 台まとめて出荷`
+            : "完成車の出荷待ち"}
+          <ArrowRight size={15} />
+        </button>
+      )}
+      {!game.machineOn.dispatch && !game.contractClaimed && (
+        <div className="contract-warning">
+          輸出設備が停止中です。設備管理から再稼働してください。
+        </div>
+      )}
+    </section>
+  );
 }
 
-function ArchiveForge({ shards, onCraft }: { shards: number; onCraft: () => void }) {
-  const ready = shards >= 180;
-  return <section className="mt-4 overflow-hidden rounded-2xl border border-[#c9f34a]/30 bg-[linear-gradient(110deg,rgba(201,243,74,.12),rgba(11,21,25,.96)_48%,rgba(13,26,30,.95))] p-5 sm:flex sm:items-center sm:justify-between sm:p-6"><div><p className="eyebrow text-[#c9f34a]">ARCHIVE FORGE / DUPLICATE LOOP</p><h2 className="mt-2 font-display text-xl font-semibold text-white">重複を、次の発見へ。</h2><p className="mt-1 max-w-xl text-xs leading-relaxed text-[#b8c7c5]">重複したアーカイブは Archive Shard に自動変換されます。180 Shard を集めると、未収集のMYTHICをひとつクラフトできます。市場価格とニュースには影響しません。</p></div><div className="mt-4 flex items-center gap-4 sm:mt-0"><div className="text-right"><p className="font-mono text-[9px] tracking-[.12em] text-[#9bb885]">ARCHIVE SHARD</p><p className="mt-1 font-mono text-2xl text-[#c9f34a]">{shards}<span className="ml-1 text-[10px] text-[#91a584]">/ 180</span></p></div><Button type="button" onClick={onCraft} className="h-11 bg-[#c9f34a] font-display text-[10px] font-semibold tracking-[.1em] text-[#10200d] hover:bg-[#e0ff80]" disabled={!ready}>FORGE MYTHIC</Button></div></section>;
+function GarageView({
+  game,
+  onSelectModel,
+  onShip,
+  onClaim,
+}: {
+  game: GameData;
+  onSelectModel: (model: VehicleModel) => void;
+  onShip: () => void;
+  onClaim: () => void;
+}) {
+  const selected =
+    VEHICLES.find(model => model.id === game.activeModel) ?? VEHICLES[0];
+  const estimated = vehicleValue(game, selected);
+  return (
+    <div className="workspace-grid garage-layout">
+      <section className="panel garage-panel">
+        <div className="panel-heading garage-heading">
+          <div>
+            <div className="eyebrow">KOBO MOTORWORKS / DEVELOPMENT GARAGE</div>
+            <h2>JDMモデル開発室</h2>
+          </div>
+          <span className="garage-live">
+            <i /> TSUKUBA DESIGN STUDIO
+          </span>
+        </div>
+        <div className={`showroom-stage body-${selected.body}`}>
+          <div className="showroom-stamp">
+            <span>工</span>
+            <b>
+              BUILT
+              <br />
+              IN JAPAN
+            </b>
+          </div>
+          <div className="showroom-floor-lines" />
+          <div className="showroom-car">
+            <CarIllustration model={selected} />
+          </div>
+          <div className="showroom-copy">
+            <span>{selected.series} / FACTORY SPEC</span>
+            <h3>{selected.name}</h3>
+            <p>{selected.tagline}</p>
+          </div>
+          <div className="showroom-spec">
+            <span>POWERTRAIN</span>
+            <b>{selected.spec}</b>
+            <span>BASE EXPORT VALUE</span>
+            <strong>{formatYen(estimated)}</strong>
+          </div>
+          <div className="showroom-sun" />
+        </div>
+        <div className="model-picker-heading">
+          <div>
+            <div className="eyebrow">HOMOLOGATED LINEUP</div>
+            <h3>生産モデルを選択</h3>
+          </div>
+          <span>SHIPPED {String(game.shipments).padStart(2, "0")} UNITS</span>
+        </div>
+        <div className="model-grid">
+          {VEHICLES.map(model => {
+            const unlocked = game.shipments >= model.unlockAt;
+            const active = model.id === game.activeModel;
+            return (
+              <button
+                type="button"
+                key={model.id}
+                className={`model-card ${active ? "model-active" : ""} ${!unlocked ? "model-locked" : ""}`}
+                disabled={!unlocked}
+                onClick={() => onSelectModel(model)}
+              >
+                <span className="model-card-top">
+                  <span>{model.series}</span>
+                  {active ? (
+                    <i className="model-check">
+                      <Check size={12} />
+                    </i>
+                  ) : !unlocked ? (
+                    <span className="model-lock">LOCKED</span>
+                  ) : (
+                    <ArrowUpRight size={14} />
+                  )}
+                </span>
+                <span
+                  className="model-color"
+                  style={{ background: model.paint }}
+                />
+                <strong>{model.name}</strong>
+                <span className="model-style">{model.style}</span>
+                <span className="model-unlock-note">
+                  {unlocked
+                    ? `${formatYen(vehicleValue(game, model))} / car`
+                    : `輸出 ${model.unlockAt} 台で解放`}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+      <aside className="side-stack garage-side-stack">
+        <section className="panel shipment-panel">
+          <div className="eyebrow">YOKOHAMA EXPORT / DOCK 02</div>
+          <div className="shipment-count">
+            <div>
+              <span>READY TO SHIP</span>
+              <b>{String(game.stock.cars).padStart(2, "0")}</b>
+            </div>
+            <CarFront size={29} strokeWidth={1.3} />
+          </div>
+          <div className="shipment-value">
+            <span>現在のモデル · {selected.name}</span>
+            <b>
+              {formatYen(estimated)}
+              <small> / unit</small>
+            </b>
+          </div>
+          <div className="shipment-divider" />
+          <div className="shipment-detail">
+            <span>出荷累計</span>
+            <b>{formatNumber(game.shipments)} 台</b>
+          </div>
+          <div className="shipment-detail">
+            <span>ドライバーレピュテーション</span>
+            <b>REP {formatNumber(game.reputation)}</b>
+          </div>
+          <button
+            type="button"
+            className="action-button action-primary full-action"
+            onClick={onShip}
+            disabled={game.stock.cars === 0 || !game.machineOn.dispatch}
+          >
+            <ArrowDownToLine size={15} />
+            {game.stock.cars
+              ? `${game.stock.cars}台を一括輸出`
+              : "完成車の出荷待ち"}
+            <ArrowRight size={15} />
+          </button>
+          {!game.machineOn.dispatch && (
+            <div className="contract-warning">横浜輸出港が停止中です。</div>
+          )}
+        </section>
+        <ContractPanel game={game} onShip={onShip} onClaim={onClaim} />
+      </aside>
+    </div>
+  );
 }
 
-function PackProtectionPanel({ streaks }: { streaks: Partial<Record<GachaPack["id"], number>> }) {
-  return <section className="mt-4 overflow-hidden rounded-2xl border border-[#f6c96a]/25 bg-[#17140e]"><div className="flex flex-col justify-between gap-2 border-b border-[#f6c96a]/15 px-5 py-4 sm:flex-row sm:items-center sm:px-6"><div><p className="eyebrow text-[#f6c96a]">PACK PROTECTION / HIGH RARITY</p><h2 className="mt-1 font-display text-lg font-semibold text-white">開封カウンター</h2></div><p className="max-w-md text-xs leading-relaxed text-[#bca98a]">同じパックでLEGEND／MYTHICを引かずに9回開封すると、10回目はLEGEND以上を確定します。</p></div><div className="grid gap-px bg-[#f6c96a]/10 sm:grid-cols-2 lg:grid-cols-5">{GACHA_PACKS.map((pack) => { const count = streaks[pack.id] ?? 0; return <div key={pack.id} className="bg-[#17140e] p-4"><div className="flex items-center justify-between"><span className="font-mono text-[9px] tracking-[.1em]" style={{ color: pack.accent }}>{pack.kicker}</span><span className="font-mono text-[10px] text-[#f6c96a]">{Math.min(count, 9)}/9</span></div><p className="mt-3 font-display text-sm font-semibold text-white">{pack.label}</p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[.09]"><div className="h-full rounded-full bg-[#f6c96a] transition-[width] duration-500" style={{ width: `${Math.min(100, count / 9 * 100)}%` }} /></div><p className="mt-2 font-mono text-[9px] text-[#95866e]">{count >= 9 ? "NEXT: LEGEND+" : `あと ${9 - count} 回で保護`}</p></div>; })}</div></section>;
+function CarIllustration({ model }: { model: VehicleModel }) {
+  const isRally = model.body === "rally";
+  const isRoadster = model.body === "roadster";
+  return (
+    <svg
+      className={`car-art car-${model.body}`}
+      viewBox="0 0 720 270"
+      role="img"
+      aria-label={`${model.name}の車体イラスト`}
+    >
+      <defs>
+        <linearGradient id={`paint-${model.id}`} x1="0" x2="0.08" y1="0" y2="1">
+          <stop offset="0" stopColor={model.paint} />
+          <stop offset=".58" stopColor={model.paint} />
+          <stop offset="1" stopColor="#7d3328" />
+        </linearGradient>
+        <linearGradient id={`glass-${model.id}`} x1="0" x2="0.3" y1="0" y2="1">
+          <stop offset="0" stopColor="#314340" />
+          <stop offset="1" stopColor="#111918" />
+        </linearGradient>
+        <linearGradient id={`shine-${model.id}`} x1="0" x2="1">
+          <stop offset="0" stopColor="#fff7df" stopOpacity="0" />
+          <stop offset=".45" stopColor="#fff7df" stopOpacity=".6" />
+          <stop offset="1" stopColor="#fff7df" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <ellipse
+        cx="368"
+        cy="224"
+        rx="265"
+        ry="17"
+        fill="#050807"
+        opacity=".68"
+      />
+      {isRally && (
+        <path
+          d="M123 150 L112 128 L184 128 L193 149 M550 150 L581 131 L616 131 L600 155"
+          fill="#1b211e"
+          stroke="#9ba49a"
+          strokeWidth="5"
+        />
+      )}
+      <path
+        d="M75 190 C83 179 100 171 122 166 L208 153 L256 112 C275 96 302 86 338 83 L423 84 C453 85 481 99 501 121 L541 152 L623 163 C646 166 660 180 663 197 L657 215 L85 215 C77 210 72 200 75 190Z"
+        fill={`url(#paint-${model.id})`}
+        stroke="#f1d5ad"
+        strokeOpacity=".45"
+        strokeWidth="2"
+      />
+      <path
+        d={
+          isRoadster
+            ? "M249 153 L283 115 C295 105 309 101 331 100 L392 100 C412 100 427 108 444 128 L462 153Z"
+            : "M245 153 L281 116 C295 102 315 94 342 93 L416 94 C442 96 463 111 482 136 L495 153Z"
+        }
+        fill={`url(#glass-${model.id})`}
+        stroke="#c3c6ad"
+        strokeOpacity=".58"
+        strokeWidth="2"
+      />
+      <path
+        d="M354 95 L350 153 M430 101 L448 153"
+        fill="none"
+        stroke="#818d7f"
+        strokeWidth="2"
+        opacity=".75"
+      />
+      <path
+        d="M267 157 C346 163 440 162 548 160"
+        fill="none"
+        stroke="#ffe5c7"
+        strokeOpacity=".48"
+        strokeWidth="2"
+      />
+      <path
+        d="M86 185 L137 174 L147 183 L120 194 L82 196Z"
+        fill="#f1dba6"
+        opacity=".85"
+      />
+      <path d="M625 174 L652 182 L654 194 L626 191Z" fill="#eb684f" />
+      <path
+        d="M144 204 L604 204"
+        fill="none"
+        stroke="#54291f"
+        strokeWidth="3"
+        opacity=".72"
+      />
+      <path
+        d="M307 173 L444 172 L520 178"
+        fill="none"
+        stroke={`url(#shine-${model.id})`}
+        strokeWidth="2"
+      />
+      <path
+        d="M116 212 L612 212"
+        fill="none"
+        stroke="#1b201d"
+        strokeWidth="6"
+      />
+      <g>
+        <circle
+          cx="190"
+          cy="207"
+          r="41"
+          fill="#0a0d0c"
+          stroke="#84897b"
+          strokeWidth="4"
+        />
+        <circle
+          cx="190"
+          cy="207"
+          r="25"
+          fill="#747a70"
+          stroke="#c3c2ad"
+          strokeWidth="3"
+        />
+        <circle
+          cx="190"
+          cy="207"
+          r="11"
+          fill="#232a25"
+          stroke="#d4d1bd"
+          strokeWidth="2"
+        />
+        {[0, 60, 120].map(angle => (
+          <path
+            key={angle}
+            d="M190 184 L190 230"
+            stroke="#d4d1bd"
+            strokeWidth="3"
+            transform={`rotate(${angle} 190 207)`}
+          />
+        ))}
+        <circle
+          cx="552"
+          cy="207"
+          r="41"
+          fill="#0a0d0c"
+          stroke="#84897b"
+          strokeWidth="4"
+        />
+        <circle
+          cx="552"
+          cy="207"
+          r="25"
+          fill="#747a70"
+          stroke="#c3c2ad"
+          strokeWidth="3"
+        />
+        <circle
+          cx="552"
+          cy="207"
+          r="11"
+          fill="#232a25"
+          stroke="#d4d1bd"
+          strokeWidth="2"
+        />
+        {[0, 60, 120].map(angle => (
+          <path
+            key={angle}
+            d="M552 184 L552 230"
+            stroke="#d4d1bd"
+            strokeWidth="3"
+            transform={`rotate(${angle} 552 207)`}
+          />
+        ))}
+      </g>
+      <path
+        d="M190 205 C218 187 267 173 327 168"
+        fill="none"
+        stroke="#fff0d5"
+        strokeOpacity=".19"
+        strokeWidth="1.5"
+      />
+      {isRally && (
+        <>
+          <path
+            d="M270 182 L320 182 M336 182 L386 182 M402 182 L452 182"
+            stroke="#eef0dd"
+            strokeOpacity=".35"
+            strokeWidth="5"
+          />
+          <rect x="589" y="149" width="17" height="5" fill="#222722" />
+        </>
+      )}
+      {isRoadster && (
+        <path
+          d="M281 108 Q314 76 360 82 L407 88"
+          fill="none"
+          stroke="#d8dfc3"
+          strokeWidth="5"
+          strokeLinecap="round"
+          opacity=".68"
+        />
+      )}
+      <text
+        x="399"
+        y="190"
+        fill="#f5ead0"
+        fontFamily="ui-monospace, monospace"
+        fontSize="10"
+        letterSpacing="2"
+        opacity=".82"
+      >
+        KOBO
+      </text>
+    </svg>
+  );
 }
 
-function LimitedDropBanner() {
-  return <section className="mt-4 overflow-hidden border border-[#ff6ee7]/35 bg-[linear-gradient(110deg,rgba(255,110,231,.14),rgba(13,20,27,.95)_55%,rgba(201,243,74,.10))] px-5 py-4 sm:flex sm:items-center sm:justify-between sm:px-6"><div><p className="eyebrow text-[#ff9ef0]">LIMITED DROP / SEASON 01</p><h2 className="mt-1 font-display text-lg font-semibold text-white">MYTHICを超える、期間限定アーカイブ。</h2><p className="mt-1 text-xs leading-relaxed text-[#c9b9c7]">全5パックに限定アイテムを1種ずつ収録。通常確率は <span className="font-mono text-[#ff9ef0]">0.02%</span>、重複時は Archive Shard +320 へ変換されます。</p></div><span className="mt-3 inline-flex w-fit items-center border border-[#ff6ee7]/45 bg-[#ff6ee7]/[.1] px-3 py-2 font-mono text-[10px] tracking-[.12em] text-[#ff9ef0] sm:mt-0">LIMITED / SEASON 01</span></section>;
+function MetricCard({
+  icon: Icon,
+  label,
+  value,
+  note,
+  tone,
+  onClick,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  note: string;
+  tone: string;
+  onClick?: () => void;
+}) {
+  const content = (
+    <>
+      <span className={`metric-icon metric-${tone}`}>
+        <Icon size={16} strokeWidth={1.7} />
+      </span>
+      <span className="metric-copy">
+        <span>{label}</span>
+        <b>{value}</b>
+        <small>{note}</small>
+      </span>
+      {onClick && <ArrowUpRight size={13} className="metric-link" />}
+    </>
+  );
+  return onClick ? (
+    <button
+      type="button"
+      className="metric-card metric-button"
+      onClick={onClick}
+    >
+      {content}
+    </button>
+  ) : (
+    <div className="metric-card">{content}</div>
+  );
 }
 
-function ProfilePreview({ profile, asset, onOpen }: { profile: AssetProfile; asset: Asset; onOpen: () => void }) {
-  const isCrypto = asset.kind === "Crypto";
-  return <section className="panel-card overflow-hidden"><div className="flex items-start justify-between border-b border-white/[.09] px-5 py-4"><div><p className="eyebrow">{isCrypto ? "PROTOCOL SNAPSHOT" : "COMPANY SNAPSHOT"}</p><p className="mt-1 font-display text-lg font-medium text-white">{asset.code} を知る</p></div><Box size={18} className="text-[#c9f34a]" /></div><div className="p-5"><p className="text-sm leading-relaxed text-[#d9e4dd]">{profile.oneLine}</p><div className="mt-4 flex flex-wrap gap-1.5"><span className="rounded-md bg-[#c9f34a]/[.1] px-2 py-1 font-mono text-[9px] text-[#c9f34a]">{profile.archetype}</span><span className="rounded-md bg-white/[.06] px-2 py-1 font-mono text-[9px] text-[#b7c5c2]">{profile.audience}</span></div><div className="mt-4 grid grid-cols-2 gap-2"><div className="rounded-lg bg-white/[.04] p-2.5"><p className="eyebrow">NEWS REACT</p><p className={`mt-1 font-mono text-xs ${profile.sensitivity === "HIGH" ? "text-[#f6c96a]" : "text-[#d9e4dd]"}`}>{profile.sensitivity}</p></div><div className="rounded-lg bg-white/[.04] p-2.5"><p className="eyebrow">RISK FEEL</p><p className={`mt-1 font-mono text-xs ${profile.risk === "HIGH" ? "text-[#ff917f]" : "text-[#d9e4dd]"}`}>{profile.risk}</p></div></div><button onClick={onOpen} className="mt-4 flex w-full items-center justify-between rounded-lg border border-white/[.12] bg-white/[.03] px-3 py-2.5 text-left transition hover:border-[#c9f34a]/40 hover:bg-[#c9f34a]/[.06]"><span className="font-display text-xs font-medium text-white">特徴と注意ポイントを見る</span><ChevronRight size={15} className="text-[#c9f34a]" /></button></div></section>;
+function SettingsDialog({
+  onClose,
+  onReset,
+}: {
+  onClose: () => void;
+  onReset: () => void;
+}) {
+  const [confirmReset, setConfirmReset] = useState(false);
+  return (
+    <div
+      className="dialog-backdrop"
+      role="presentation"
+      onMouseDown={event => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        className="settings-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-title"
+      >
+        <div className="settings-top">
+          <div className="settings-icon">
+            <Settings2 size={18} />
+          </div>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="閉じる"
+            onClick={onClose}
+          >
+            <X size={17} />
+          </button>
+        </div>
+        <div className="eyebrow">KOBO MOTORWORKS / SYSTEM</div>
+        <h2 id="settings-title">システム設定</h2>
+        <p>進行状況はこのブラウザに自動保存されています。</p>
+        <div className="settings-save-row">
+          <span>
+            <Check size={14} /> LOCAL SAVE ACTIVE
+          </span>
+          <small>自動保存 · {SAVE_KEY}</small>
+        </div>
+        <div className="settings-reset">
+          <div>
+            <b>新しい工場を始める</b>
+            <span>資金・生産・ネットワークの進行状況をリセット</span>
+          </div>
+          <button
+            type="button"
+            className="reset-button"
+            onClick={() => {
+              if (confirmReset) onReset();
+              else setConfirmReset(true);
+            }}
+          >
+            {confirmReset ? (
+              "もう一度押して初期化"
+            ) : (
+              <>
+                <RotateCcw size={14} />
+                進行状況をリセット
+              </>
+            )}
+          </button>
+        </div>
+        <button
+          type="button"
+          className="action-button action-secondary full-action"
+          onClick={onClose}
+        >
+          ゲームに戻る
+          <ArrowRight size={15} />
+        </button>
+      </section>
+    </div>
+  );
 }
 
-function ProfileModal({ asset, profile, onClose }: { asset: Asset; profile: AssetProfile; onClose: () => void }) {
-  const isCrypto = asset.kind === "Crypto";
-  return <div role="dialog" aria-modal="true" aria-label={`${asset.name} の特徴`} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }} className="fixed inset-0 z-[70] grid place-items-center bg-[#030708]/80 p-4 backdrop-blur-md"><section onMouseDown={(event) => event.stopPropagation()} className="gacha-modal relative max-h-[90dvh] w-full max-w-xl overflow-y-auto rounded-2xl border border-[#c9f34a]/30 bg-[#0e1a1e] shadow-2xl"><div className="absolute -right-14 -top-14 h-44 w-44 rounded-full bg-[#c9f34a]/10 blur-3xl" /><button type="button" onClick={onClose} className="absolute right-4 top-4 z-10 rounded-full border border-white/[.1] bg-[#0b1519]/90 p-2 text-[#d5e2d9] transition hover:border-[#c9f34a]/45 hover:bg-[#c9f34a] hover:text-[#12200f]" aria-label="企業情報を閉じる"><X size={18} /></button><div className="relative border-b border-white/[.09] p-6 sm:p-7"><p className="eyebrow text-[#c9f34a]">{isCrypto ? "PROTOCOL PROFILE" : "COMPANY PROFILE"}</p><div className="mt-3 flex items-end gap-3"><h2 className="font-display text-4xl font-bold tracking-[-.07em] text-white">{asset.code}</h2><p className="mb-1 text-sm text-[#a9b9b7]">{asset.name}</p></div><p className="mt-4 max-w-lg text-base leading-relaxed text-[#dce8df]">{profile.oneLine}</p></div><div className="relative grid gap-5 p-6 sm:grid-cols-[1.1fr_.9fr] sm:p-7"><div><p className="eyebrow">WHAT TO WATCH</p><div className="mt-3 space-y-2">{profile.strengths.map((strength, index) => <div key={strength} className="flex items-center gap-3 rounded-lg bg-white/[.045] px-3 py-2.5"><span className="grid h-5 w-5 place-items-center rounded-full bg-[#c9f34a] font-mono text-[9px] font-semibold text-[#12200f]">{index + 1}</span><span className="text-sm text-white">{strength}</span></div>)}</div></div><div className="rounded-xl border border-white/[.09] bg-black/15 p-4"><p className="eyebrow">QUICK FACTS</p><div className="mt-3 space-y-3"><FactRow label="TYPE" value={profile.archetype} accent="lime" /><FactRow label="FOR" value={profile.audience} /><FactRow label="NEWS REACT" value={profile.sensitivity} accent={profile.sensitivity === "HIGH" ? "amber" : "neutral"} /><FactRow label="RISK FEEL" value={profile.risk} accent={profile.risk === "HIGH" ? "coral" : "neutral"} /></div></div><div className="sm:col-span-2 rounded-xl border border-[#ff775f]/20 bg-[#ff775f]/[.06] p-4"><p className="eyebrow text-[#ff917f]">KEEP IN MIND</p><p className="mt-2 text-sm text-[#ffe0da]">注意: {profile.watch}</p><p className="mt-1 text-[11px] leading-relaxed text-[#a99a96]">この内容は、ゲーム内の架空市場を理解するためのプロフィールです。実在の企業・投資判断に関する情報ではありません。</p></div><button type="button" onClick={onClose} className="sm:col-span-2 flex w-full items-center justify-center gap-2 rounded-xl bg-[#c9f34a] px-4 py-3 font-display text-xs font-semibold tracking-[.1em] text-[#12200f] transition hover:bg-[#ddfb78]"><X size={15} /> 市場に戻る</button><p className="sm:col-span-2 -mt-3 text-center font-mono text-[9px] text-[#74858a]">背景クリック または ESC キーでも閉じられます</p></div></section></div>;
-}
+export default function Home() {
+  const [game, setGame] = useState<GameData>(() => loadGame());
+  const [running, setRunning] = useState(true);
+  const [speed, setSpeed] = useState<1 | 2 | 3>(1);
+  const [view, setView] = useState<View>("map");
+  const [selectedRegionId, setSelectedRegionId] = useState("tsukuba");
+  const [selectedMachine, setSelectedMachine] = useState<MachineId>("assembly");
+  const [detailTab, setDetailTab] = useState<DetailTab>("region");
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
-function FactRow({ label, value, accent = "neutral" }: { label: string; value: string; accent?: "lime" | "amber" | "coral" | "neutral" }) {
-  const colors = { lime: "text-[#c9f34a]", amber: "text-[#f6c96a]", coral: "text-[#ff917f]", neutral: "text-white" };
-  return <div className="flex items-center justify-between gap-3 border-b border-white/[.07] pb-2 last:border-0 last:pb-0"><span className="font-mono text-[9px] tracking-[.11em] text-[#77888c]">{label}</span><span className={`text-right font-mono text-[10px] ${colors[accent]}`}>{value}</span></div>;
-}
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SAVE_KEY, JSON.stringify(game));
+    } catch {
+      // The simulation remains playable when browser storage is unavailable.
+    }
+  }, [game]);
 
-function BlueCandlestickPanel({ candles, crypto }: { candles: Candle[]; crypto: boolean }) {
-  const min = Math.min(...candles.map((candle) => candle.low));
-  const max = Math.max(...candles.map((candle) => candle.high));
-  const range = Math.max(max - min, max * 0.01);
-  const frame = { width: 1040, height: 410, left: 64, right: 18, top: 16, priceHeight: 254, volumeTop: 305, volumeHeight: 68 };
-  const chartWidth = frame.width - frame.left - frame.right;
-  const step = chartWidth / candles.length;
-  const maxVolume = Math.max(...candles.map((candle) => candle.volume));
-  const y = (value: number) => frame.top + ((max - value) / range) * frame.priceHeight;
-  const priceDigits = crypto ? 3 : 2;
-  const last = candles.at(-1);
-  const upColor = "#69adff";
-  const downColor = "#2d65b9";
-  const lastLabelY = last ? Math.max(frame.top, Math.min(frame.top + frame.priceHeight - 18, y(last.close) - 9)) : frame.top;
-  return <div className="h-full overflow-x-auto"><svg viewBox={`0 0 ${frame.width} ${frame.height}`} className="h-full min-w-[650px] w-full" role="img" aria-label="青基調のローソク足と出来高を表示する価格チャート"><defs><linearGradient id="blueChartFade" x1="0" x2="0" y1="0" y2="1"><stop stopColor="#4f9bff" stopOpacity=".16" /><stop offset="1" stopColor="#4f9bff" stopOpacity="0" /></linearGradient></defs><rect x={frame.left} y={frame.top} width={chartWidth} height={frame.priceHeight} fill="url(#blueChartFade)" />{[0, 1, 2, 3, 4].map((index) => { const value = max - (range * index) / 4; const axisY = y(value); return <g key={index}><line x1={frame.left} x2={frame.width - frame.right} y1={axisY} y2={axisY} stroke="#8fc5ff" strokeOpacity=".13" strokeWidth="1" /><text x={frame.width - frame.right + 6} y={axisY + 3} fill="#77a3cd" fontFamily="IBM Plex Mono" fontSize="10">{value.toFixed(priceDigits)}</text></g>; })}<line x1={frame.left} x2={frame.width - frame.right} y1={frame.volumeTop - 12} y2={frame.volumeTop - 12} stroke="#8fc5ff" strokeOpacity=".2" strokeWidth="1" /><text x={frame.left} y={frame.volumeTop - 18} fill="#78a3cb" fontFamily="IBM Plex Mono" fontSize="9" letterSpacing="1.3">VOLUME</text><text x={frame.width - frame.right - 80} y={frame.volumeTop - 18} fill="#8fc5ff" fontFamily="IBM Plex Mono" fontSize="9">UP / LIGHT</text><text x={frame.width - frame.right} y={frame.volumeTop - 18} fill="#4c7fb9" fontFamily="IBM Plex Mono" fontSize="9" textAnchor="end">DOWN / DEEP</text>{candles.map((candle, index) => { const rising = candle.close >= candle.open; const color = rising ? upColor : downColor; const center = frame.left + index * step + step / 2; const bodyTop = Math.min(y(candle.open), y(candle.close)); const bodyHeight = Math.max(2, Math.abs(y(candle.open) - y(candle.close))); const volumeHeight = (candle.volume / maxVolume) * frame.volumeHeight; return <g key={`${candle.time}-${index}`}><line x1={center} x2={center} y1={y(candle.high)} y2={y(candle.low)} stroke={color} strokeWidth="1.4" /><rect x={center - step * 0.3} y={bodyTop} width={Math.max(3, step * 0.6)} height={bodyHeight} rx=".6" fill={color} /><rect x={center - step * 0.3} y={frame.volumeTop + frame.volumeHeight - volumeHeight} width={Math.max(3, step * 0.6)} height={volumeHeight} fill={color} fillOpacity=".72" />{(index === 0 || index === candles.length - 1 || index % 8 === 0) && <text x={center} y={frame.volumeTop + frame.volumeHeight + 20} fill="#77a3cd" fontFamily="IBM Plex Mono" fontSize="9" textAnchor="middle">{candle.time}</text>}</g>; })}{last && <g><line x1={frame.left} x2={frame.width - frame.right} y1={y(last.close)} y2={y(last.close)} stroke="#8fc5ff" strokeOpacity=".85" strokeDasharray="3 4" /><rect x="1" y={lastLabelY} width="61" height="18" rx="3" fill="#4f9bff" /><text x="5" y={lastLabelY + 12.3} fill="#dcecff" fontFamily="IBM Plex Mono" fontSize="6.5" fontWeight="600">LAST</text><text x="59" y={lastLabelY + 12.4} fill="#ffffff" fontFamily="IBM Plex Mono" fontSize="7.5" fontWeight="700" textAnchor="end">{last.close.toFixed(priceDigits)}</text></g>}</svg></div>;
-}
+  useEffect(() => {
+    if (!running) return;
+    const timer = window.setInterval(
+      () => setGame(current => advanceGame(current)),
+      1_100 / speed
+    );
+    return () => window.clearInterval(timer);
+  }, [running, speed]);
 
-function CandlestickPanel({ candles, crypto }: { candles: Candle[]; crypto: boolean }) {
-  const min = Math.min(...candles.map((candle) => candle.low));
-  const max = Math.max(...candles.map((candle) => candle.high));
-  const range = Math.max(max - min, max * 0.01);
-  const frame = { width: 1040, height: 410, left: 64, right: 18, top: 16, priceHeight: 254, volumeTop: 305, volumeHeight: 68 };
-  const chartWidth = frame.width - frame.left - frame.right;
-  const step = chartWidth / candles.length;
-  const maxVolume = Math.max(...candles.map((candle) => candle.volume));
-  const y = (value: number) => frame.top + ((max - value) / range) * frame.priceHeight;
-  const priceDigits = crypto ? 3 : 2;
-  const last = candles.at(-1);
+  const selectedRegion = useMemo(
+    () => REGIONS.find(region => region.id === selectedRegionId) ?? REGIONS[3],
+    [selectedRegionId]
+  );
+  const selectedVehicle =
+    VEHICLES.find(model => model.id === game.activeModel) ?? VEHICLES[0];
+  const unitValue = vehicleValue(game, selectedVehicle);
+  const operationalCount = Object.values(game.machineOn).filter(Boolean).length;
 
-  return <div className="h-full overflow-x-auto"><svg viewBox={`0 0 ${frame.width} ${frame.height}`} className="h-full min-w-[650px] w-full" role="img" aria-label="ローソク足と出来高を表示する価格チャート"><defs><linearGradient id="chartFade" x1="0" x2="0" y1="0" y2="1"><stop stopColor="#c9f34a" stopOpacity=".07" /><stop offset="1" stopColor="#c9f34a" stopOpacity="0" /></linearGradient></defs><rect x={frame.left} y={frame.top} width={chartWidth} height={frame.priceHeight} fill="url(#chartFade)" />{[0, 1, 2, 3, 4].map((index) => { const value = max - (range * index) / 4; const axisY = y(value); return <g key={index}><line x1={frame.left} x2={frame.width - frame.right} y1={axisY} y2={axisY} stroke="#ffffff" strokeOpacity=".07" strokeWidth="1" /><text x={frame.width - frame.right + 6} y={axisY + 3} fill="#6f8085" fontFamily="IBM Plex Mono" fontSize="10">{value.toFixed(priceDigits)}</text></g>; })}<line x1={frame.left} x2={frame.width - frame.right} y1={frame.volumeTop - 12} y2={frame.volumeTop - 12} stroke="#ffffff" strokeOpacity=".12" strokeWidth="1" /><text x={frame.left} y={frame.volumeTop - 18} fill="#718187" fontFamily="IBM Plex Mono" fontSize="9" letterSpacing="1.3">VOLUME</text>{candles.map((candle, index) => { const rising = candle.close >= candle.open; const color = rising ? "#c9f34a" : "#ff775f"; const center = frame.left + index * step + step / 2; const bodyTop = Math.min(y(candle.open), y(candle.close)); const bodyHeight = Math.max(2, Math.abs(y(candle.open) - y(candle.close))); const volumeHeight = (candle.volume / maxVolume) * frame.volumeHeight; return <g key={`${candle.time}-${index}`}><line x1={center} x2={center} y1={y(candle.high)} y2={y(candle.low)} stroke={color} strokeWidth="1.35" /><rect x={center - step * 0.3} y={bodyTop} width={Math.max(3, step * 0.6)} height={bodyHeight} rx=".6" fill={color} /><rect x={center - step * 0.3} y={frame.volumeTop + frame.volumeHeight - volumeHeight} width={Math.max(3, step * 0.6)} height={volumeHeight} fill={color} fillOpacity=".55" />{(index === 0 || index === candles.length - 1 || index % 8 === 0) && <text x={center} y={frame.volumeTop + frame.volumeHeight + 20} fill="#6f8085" fontFamily="IBM Plex Mono" fontSize="9" textAnchor="middle">{candle.time}</text>}</g>; })}{last && <g><line x1={frame.left} x2={frame.width - frame.right} y1={y(last.close)} y2={y(last.close)} stroke={last.close >= last.open ? "#c9f34a" : "#ff775f"} strokeOpacity=".65" strokeDasharray="3 4" /><rect x={frame.width - frame.right - 44} y={y(last.close) - 9} width="42" height="18" rx="3" fill={last.close >= last.open ? "#c9f34a" : "#ff775f"} /><text x={frame.width - frame.right - 23} y={y(last.close) + 3.5} fill="#10200e" fontFamily="IBM Plex Mono" fontSize="8" fontWeight="600" textAnchor="middle">LAST</text></g>}</svg></div>;
+  const selectMachine = (id: MachineId) => {
+    setSelectedMachine(id);
+    setDetailTab("machine");
+  };
+
+  const unlockRegion = (region: Region) => {
+    if (game.unlockedRegions.includes(region.id)) return;
+    if (game.cash < region.cost) {
+      toast.error("拠点開設に必要な資金が足りません");
+      return;
+    }
+    setGame(current => {
+      if (
+        current.unlockedRegions.includes(region.id) ||
+        current.cash < region.cost
+      )
+        return current;
+      return {
+        ...current,
+        cash: current.cash - region.cost,
+        unlockedRegions: [...current.unlockedRegions, region.id],
+      };
+    });
+    toast.success(`${region.prefecture}に新しい生産ルートが開通しました`, {
+      description: `${region.effect} · 日本ネットワーク拡張`,
+    });
+  };
+
+  const upgradeMachine = (id: MachineId) => {
+    if (game.levels[id] >= MAX_LEVEL) return;
+    const cost = machineUpgradeCost(game, id);
+    if (game.cash < cost) {
+      toast.error("アップグレード資金が足りません");
+      return;
+    }
+    setGame(current => {
+      const currentCost = machineUpgradeCost(current, id);
+      if (current.cash < currentCost || current.levels[id] >= MAX_LEVEL)
+        return current;
+      return {
+        ...current,
+        cash: current.cash - currentCost,
+        levels: { ...current.levels, [id]: current.levels[id] + 1 },
+      };
+    });
+    toast.success(
+      `${MACHINES.find(machine => machine.id === id)?.name}を強化しました`,
+      { description: `設備レベル ${game.levels[id]} → ${game.levels[id] + 1}` }
+    );
+  };
+
+  const toggleMachine = (id: MachineId) => {
+    const next = !game.machineOn[id];
+    setGame(current => ({
+      ...current,
+      machineOn: { ...current.machineOn, [id]: !current.machineOn[id] },
+    }));
+    toast(next ? "設備を再稼働しました" : "設備を停止しました", {
+      description: MACHINES.find(machine => machine.id === id)?.name,
+    });
+  };
+
+  const shipCars = () => {
+    if (game.stock.cars <= 0) {
+      toast.error("輸出待ちの完成車がありません", {
+        description: "組立ラインが完成車を生産するまでお待ちください。",
+      });
+      return;
+    }
+    if (
+      !game.machineOn.dispatch ||
+      !game.unlockedRegions.includes("yokohama")
+    ) {
+      toast.error("横浜輸出港が稼働していません");
+      return;
+    }
+    const quantity = game.stock.cars;
+    const perCar = vehicleValue(game, selectedVehicle);
+    const total = quantity * perCar;
+    setGame(current => {
+      const count = current.stock.cars;
+      if (
+        count <= 0 ||
+        !current.machineOn.dispatch ||
+        !current.unlockedRegions.includes("yokohama")
+      )
+        return current;
+      const currentModel =
+        VEHICLES.find(model => model.id === current.activeModel) ?? VEHICLES[0];
+      const payout = count * vehicleValue(current, currentModel);
+      return {
+        ...current,
+        cash: current.cash + payout,
+        stock: { ...current.stock, cars: 0 },
+        shipments: current.shipments + count,
+        reputation: current.reputation + count * 12,
+      };
+    });
+    toast.success(`${quantity}台を横浜港から輸出しました`, {
+      description: `${selectedVehicle.name} · 売上 ${formatYen(total)} · REP +${quantity * 12}`,
+    });
+  };
+
+  const claimContract = () => {
+    if (game.shipments < 3 || game.contractClaimed) return;
+    setGame(current =>
+      current.shipments < 3 || current.contractClaimed
+        ? current
+        : {
+            ...current,
+            cash: current.cash + 180_000,
+            reputation: current.reputation + 75,
+            contractClaimed: true,
+          }
+    );
+    toast.success("峠ミーティングの契約を達成しました", {
+      description: "報酬 ¥180,000 と REP +75 を受け取りました。",
+    });
+  };
+
+  const selectModel = (model: VehicleModel) => {
+    if (game.shipments < model.unlockAt) return;
+    setGame(current => ({ ...current, activeModel: model.id }));
+    toast.success(`${model.name}を生産モデルに設定しました`, {
+      description: `${formatYen(vehicleValue(game, model))} / car · 生産ラインへ反映`,
+    });
+  };
+
+  const resetGame = () => {
+    window.localStorage.removeItem(SAVE_KEY);
+    setGame(createFreshGame());
+    setRunning(true);
+    setSpeed(1);
+    setView("map");
+    setSelectedRegionId("tsukuba");
+    setSelectedMachine("assembly");
+    setDetailTab("region");
+    setSettingsOpen(false);
+    toast.success("新しい工場を開設しました", {
+      description: "日本の自動車ネットワークを再スタート。",
+    });
+  };
+
+  const tabs: Array<{
+    id: View;
+    label: string;
+    sub: string;
+    icon: LucideIcon;
+  }> = [
+    { id: "map", label: "日本マップ", sub: "NETWORK", icon: Map },
+    { id: "factory", label: "工場ライン", sub: "PRODUCTION", icon: Factory },
+    { id: "garage", label: "JDMガレージ", sub: "DEVELOPMENT", icon: CarFront },
+  ];
+
+  return (
+    <div className="game-root">
+      <aside className="side-rail">
+        <button
+          type="button"
+          className="rail-logo"
+          aria-label="KOBO Motorworks ホーム"
+          onClick={() => setView("map")}
+        >
+          <span>工</span>
+          <i />
+        </button>
+        <div className="rail-rule" />
+        <nav className="rail-nav" aria-label="ゲームビュー">
+          {tabs.map(tab => {
+            const Icon = tab.icon;
+            return (
+              <button
+                type="button"
+                key={tab.id}
+                className={`rail-button ${view === tab.id ? "rail-active" : ""}`}
+                aria-label={tab.label}
+                aria-current={view === tab.id ? "page" : undefined}
+                onClick={() => setView(tab.id)}
+              >
+                <Icon size={18} strokeWidth={1.7} />
+                <span>{tab.sub}</span>
+                <i />
+              </button>
+            );
+          })}
+        </nav>
+        <div className="rail-bottom">
+          <div className="rail-jp-stamp">
+            日<br />本
+          </div>
+          <button
+            type="button"
+            className="rail-button rail-settings"
+            aria-label="設定"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <Settings2 size={18} />
+            <span>SETUP</span>
+          </button>
+        </div>
+      </aside>
+
+      <div className="app-column">
+        <header className="topbar">
+          <div className="wordmark">
+            <div className="wordmark-seal">
+              <span>工</span>
+              <i />
+            </div>
+            <div>
+              <b>KOBO MOTORWORKS</b>
+              <small>JDM AUTOMATION SIMULATOR</small>
+            </div>
+          </div>
+          <div className="topbar-location">
+            <MapPin size={13} />
+            <span>TSUKUBA PLANT</span>
+            <i /> <b>IBARAKI, JAPAN</b>
+          </div>
+          <div className="topbar-controls">
+            <div
+              className={`factory-status ${running ? "status-running" : "status-paused"}`}
+            >
+              <i />
+              {running ? "FACTORY LIVE" : "PAUSED"}
+            </div>
+            <div className="speed-control" aria-label="シミュレーション速度">
+              {([1, 2, 3] as const).map(value => (
+                <button
+                  type="button"
+                  className={speed === value ? "speed-active" : ""}
+                  key={value}
+                  onClick={() => setSpeed(value)}
+                  aria-pressed={speed === value}
+                >
+                  {value}×
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className={`play-toggle ${running ? "is-playing" : ""}`}
+              aria-label={running ? "一時停止" : "再生"}
+              onClick={() => setRunning(value => !value)}
+            >
+              {running ? (
+                <Pause size={15} fill="currentColor" />
+              ) : (
+                <Play size={15} fill="currentColor" />
+              )}
+            </button>
+            <button
+              type="button"
+              className="top-settings"
+              aria-label="設定"
+              onClick={() => setSettingsOpen(true)}
+            >
+              <Settings2 size={16} />
+            </button>
+          </div>
+        </header>
+
+        <main className="main-content">
+          <section className="page-heading">
+            <div>
+              <div className="eyebrow page-eyebrow">
+                <span className="eyebrow-line" /> SEASON 01 / NIPPON AUTOMATION
+                PROJECT
+              </div>
+              <h1>
+                NIPPON <span>MOTOR GRID</span>
+              </h1>
+              <p>
+                組んで、流して、日本を走らせる。{" "}
+                <i>日本発、JDMオートメーション。</i>
+              </p>
+            </div>
+            <div className="shift-card">
+              <span className="shift-mark">01</span>
+              <div>
+                <small>FACTORY SHIFT</small>
+                <b>
+                  DAY 01 <i>·</i> TSUKUBA
+                </b>
+                <span>
+                  茨城県つくば市 <i>35.90°N / 140.06°E</i>
+                </span>
+              </div>
+              <div className="sun-stamp">日</div>
+            </div>
+          </section>
+
+          <section className="metrics-row" aria-label="工場ステータス">
+            <MetricCard
+              icon={BadgeJapaneseYen}
+              label="運転資金 / OPERATING FUNDS"
+              value={formatYen(game.cash)}
+              note="輸出・契約報酬で拡張"
+              tone="money"
+            />
+            <MetricCard
+              icon={CarFront}
+              label="出荷待ち / READY TO SHIP"
+              value={`${String(game.stock.cars).padStart(2, "0")} 台`}
+              note={`${selectedVehicle.name} · ${formatYen(unitValue)} / unit`}
+              tone="cars"
+              onClick={() => setView("garage")}
+            />
+            <MetricCard
+              icon={Factory}
+              label="累計生産 / CARS BUILT"
+              value={`${formatNumber(game.lifetimeCars)} 台`}
+              note={`${operationalCount} / 6 生産設備が稼働中`}
+              tone="built"
+              onClick={() => setView("factory")}
+            />
+            <MetricCard
+              icon={Truck}
+              label="輸出実績 / SHIPPED"
+              value={`${formatNumber(game.shipments)} 台`}
+              note={`REP ${formatNumber(game.reputation)} · 横浜港`}
+              tone="export"
+              onClick={() => setView("garage")}
+            />
+          </section>
+
+          <div className="view-switcher">
+            <div className="view-tabs">
+              {tabs.map(tab => {
+                const Icon = tab.icon;
+                return (
+                  <button
+                    type="button"
+                    key={tab.id}
+                    className={
+                      view === tab.id ? "view-tab tab-current" : "view-tab"
+                    }
+                    onClick={() => setView(tab.id)}
+                  >
+                    <Icon size={15} />
+                    <span>{tab.label}</span>
+                    <small>{tab.sub}</small>
+                    {view === tab.id && <i />}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="autosave-status">
+              <span className="save-led" /> AUTO-SAVE <b>ON</b>
+              <span className="view-separator" /> SHIFT CYCLE{" "}
+              <strong>{String(game.tick).padStart(4, "0")}</strong>
+            </div>
+          </div>
+
+          {view === "map" && (
+            <>
+              <div className="workspace-grid map-layout">
+                <JapanMap
+                  game={game}
+                  selectedId={selectedRegionId}
+                  onSelect={id => {
+                    setSelectedRegionId(id);
+                    setDetailTab("region");
+                  }}
+                />
+                <aside className="side-stack">
+                  <DetailInspector
+                    game={game}
+                    region={selectedRegion}
+                    selectedMachine={selectedMachine}
+                    detailTab={detailTab}
+                    onTab={setDetailTab}
+                    onUnlock={unlockRegion}
+                    onOpenMachine={selectMachine}
+                    onViewChange={setView}
+                    onUpgrade={upgradeMachine}
+                    onToggle={toggleMachine}
+                  />
+                  <ContractPanel
+                    game={game}
+                    onShip={shipCars}
+                    onClaim={claimContract}
+                  />
+                </aside>
+              </div>
+              <ProductionLine
+                game={game}
+                selectedMachine={selectedMachine}
+                onSelectMachine={selectMachine}
+              />
+            </>
+          )}
+
+          {view === "factory" && (
+            <div className="workspace-grid factory-layout">
+              <div className="factory-main-column">
+                <ProductionLine
+                  game={game}
+                  selectedMachine={selectedMachine}
+                  onSelectMachine={selectMachine}
+                  detailed
+                />
+                <section className="panel flow-card">
+                  <div className="panel-heading">
+                    <div>
+                      <div className="eyebrow">
+                        SUPPLY / PARTS / FINISHED VEHICLES
+                      </div>
+                      <h2>工場在庫</h2>
+                    </div>
+                    <span className="inventory-total">
+                      <PackageCheck size={14} /> AUTO-SYNC
+                    </span>
+                  </div>
+                  <InventoryBoard game={game} />
+                  <div className="flow-note">
+                    <div className="flow-note-icon">
+                      <BatteryCharging size={17} />
+                    </div>
+                    <div>
+                      <b>素材はすべて自動で搬送</b>
+                      <span>
+                        設備をアップグレードするとサイクルが短縮。地域拠点の開設は日本マップから。
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setView("map");
+                        setSelectedRegionId("sapporo");
+                        setDetailTab("region");
+                      }}
+                    >
+                      マップを開く
+                      <ArrowRight size={13} />
+                    </button>
+                  </div>
+                </section>
+              </div>
+              <aside className="side-stack factory-side-stack">
+                <DetailInspector
+                  game={game}
+                  region={selectedRegion}
+                  selectedMachine={selectedMachine}
+                  detailTab="machine"
+                  onTab={tab => {
+                    setDetailTab(tab);
+                    if (tab === "region") setView("map");
+                  }}
+                  onUnlock={unlockRegion}
+                  onOpenMachine={selectMachine}
+                  onViewChange={setView}
+                  onUpgrade={upgradeMachine}
+                  onToggle={toggleMachine}
+                />
+                <ContractPanel
+                  game={game}
+                  onShip={shipCars}
+                  onClaim={claimContract}
+                />
+              </aside>
+            </div>
+          )}
+
+          {view === "garage" && (
+            <>
+              <GarageView
+                game={game}
+                onSelectModel={selectModel}
+                onShip={shipCars}
+                onClaim={claimContract}
+              />
+              <ProductionLine
+                game={game}
+                selectedMachine={selectedMachine}
+                onSelectMachine={id => {
+                  selectMachine(id);
+                  setView("factory");
+                }}
+              />
+            </>
+          )}
+
+          <footer className="game-footer">
+            <div className="footer-brand">
+              <span>工</span>
+              <b>KOBO MOTORWORKS</b>
+              <i>—</i>
+              <small>BUILT BY THE LINE. DRIVEN BY YOU.</small>
+            </div>
+            <div className="footer-system">
+              <span>
+                <i /> SIMULATION ONLINE
+              </span>
+              <span>LOCAL SAVE ENABLED</span>
+              <span>© KOBO AUTOMOTIVE / 2026</span>
+            </div>
+          </footer>
+        </main>
+      </div>
+      {settingsOpen && (
+        <SettingsDialog
+          onClose={() => setSettingsOpen(false)}
+          onReset={resetGame}
+        />
+      )}
+    </div>
+  );
 }

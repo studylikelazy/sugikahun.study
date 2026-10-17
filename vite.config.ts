@@ -209,6 +209,26 @@ function vitePluginStorageProxy(): Plugin {
   };
 }
 
+/**
+ * GitHub Pages has no SPA fallback: unknown paths get Pages' own 404.
+ * Emitting a copy of the built index.html as 404.html makes deep links
+ * (e.g. /midnight) boot the SPA, which then routes client-side.
+ */
+function vitePluginSpaFallback404(): Plugin {
+  return {
+    name: "spa-fallback-404",
+    apply: "build",
+    closeBundle() {
+      if (!isGitHubPages) return;
+      const outDir = path.resolve(PROJECT_ROOT, "dist/public");
+      const indexHtml = path.join(outDir, "index.html");
+      if (fs.existsSync(indexHtml)) {
+        fs.copyFileSync(indexHtml, path.join(outDir, "404.html"));
+      }
+    },
+  };
+}
+
 const isGitHubPages = process.env.GITHUB_PAGES === "true";
 const plugins = [
   react(),
@@ -217,6 +237,7 @@ const plugins = [
   ...(isGitHubPages ? [] : [vitePluginManusRuntime()]),
   vitePluginManusDebugCollector(),
   vitePluginStorageProxy(),
+  vitePluginSpaFallback404(),
 ];
 
 export default defineConfig({

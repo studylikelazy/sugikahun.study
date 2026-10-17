@@ -48,6 +48,7 @@ economy は常時 1 Hz。これにより性能予算（`07` §9）を二重取�
 | `S_PA` | PA（大黒・辰巳・芝浦） | RoadRenderer（停車） | マウス＋歩行 | vehicle+economy |
 | `S_TSUKUBA` | 筑波 TC2000 | RoadRenderer（サーキット） | パッド | vehicle |
 | `S_DEBRIEF` | 解析（ラップ/テレメトリ） | UI | マウス | economy |
+| `S_PROJECT49` | **最終ステージ『PROJECT 49』**（3夜の連続イベント） | 両方 | パッド＋マウス | 両方 |
 
 ### 2.2 遷移図
 
@@ -68,7 +69,37 @@ economy は常時 1 Hz。これにより性能予算（`07` §9）を二重取�
      │                              ▼                              │
      └──────── S_DEBRIEF ◄──── S_TSUKUBA                           │
                    └───────────────────────────────────────────────┘
+
+   ┌─ 6派閥すべて制覇 ∧ Act6 ∧ 全38点 LEGENDARY ────────────────────┐
+   │                                                                │
+   │   S_FACTORY ──[最終ステージへ]──► S_PROJECT49                  │
+   │                                      │                         │
+   │        第1夜 C1一周・環状の王（1本勝負）│ ← S_DRIVE_C1 を再利用  │
+   │        第2夜 最終組み上げ              │ ← S_GARAGE を再利用     │
+   │        第3夜 筑波単独アタック          │ ← S_TSUKUBA を再利用    │
+   │                                      ▼                         │
+   │                                 0:49.999 → ED                  │
+   └────────────────────────────────────────────────────────────────┘
 ```
+
+### 2.2.1 `S_PROJECT49` の制御
+
+`S_PROJECT49` は独自の描画系を持たない**メタシーン**である。
+既存の 3 シーンを順に呼び出し、**途中セーブとリトライを禁止**するだけの薄い層として実装する。
+
+```ts
+type Project49Phase = "night1_king" | "night2_assembly" | "night3_attack" | "cleared";
+
+function canEnterProject49(w: WorldState): boolean {
+  return w.factions.every(f => f.conquered)        // ← 6派閥すべて制覇（04 §4.5）
+      && w.records.tsukubaBestS !== null
+      && w.records.tsukubaBestS <= 52.0            // Act6 到達
+      && heroLegendaryCount(w.hero) === 38;        // 全主要部品が LEGENDARY
+}
+```
+
+- `night1_king` / `night2_assembly` は**やり直し不可**（オートセーブを抑止）。
+- `night3_attack` のみ無制限リトライ。失敗しても `night3_attack` から再開。
 
 ### 2.3 シャッター遷移の仕様（本作の看板演出）
 
@@ -105,11 +136,30 @@ interface WorldState {
   research:  { unlocked: Set<ResearchId>; data: Record<DataKind, number> };
   pressure:  { nuisance: number; heat: number; debt: number };
   records:   { tsukubaBestS: number | null; sectorBest: number[]; c1BestS: number | null };
+  factions:  FactionState[];    // 6件固定。04 §4.5。PROJECT 49 の解禁判定に使う
+  project49: { phase: Project49Phase | null; unlockedAt: number | null };
 }
 ```
 
 **市場在庫はセーブしない**：`hash32(seed, 市場, 週)` から毎回再生成する（S3 §2）。
 セーブサイズと「リロードで引き直し」の両方をここで殺す。
+
+#### FactionState（派閥制覇の進行）
+
+```ts
+type FactionId = "kanjo" | "gaishu" | "wangan" | "yokohane" | "daikoku" | "king";
+
+interface FactionState {
+  id: FactionId;
+  territory: RouteId[];        // 縄張り（C1内回り / C1外回り / B湾岸 / K1横羽 / 大黒 / 全線）
+  namedTotal: number;          // その縄張りのネームド総数
+  namedDefeated: number;
+  leaderDefeated: boolean;
+  uniqueConditionMet: boolean; // 派閥固有の勝利条件（04 §4.5 の表）
+  conquered: boolean;          // = leaderDefeated ∧ uniqueConditionMet ∧ (defeated/total ≥ 0.70)
+  logBonus: number;            // 制覇後、その縄張りの走行ログ価値 ×1.15
+}
+```
 
 ### 3.2 FactorySoA（型付き配列の束）
 

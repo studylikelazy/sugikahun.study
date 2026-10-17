@@ -17,6 +17,7 @@ import {
   MARKET_CHASSIS_POOL,
   MARKET_IDS,
   MARKET_PART_POOL,
+  REQUIRED_CHASSIS_CODES,
   TIER_WEIGHTS,
   type ContainerLot,
   type MarketContext,
@@ -77,11 +78,34 @@ describe("市場の構成", () => {
     expect([...DOMESTIC_CHANNELS]).toEqual(["aa", "netauc", "yard", "bluebin"]);
   });
 
-  it("実在車名の対応が設計どおり（S30Z / BNR32 / JZA80）", () => {
-    const refs = Object.fromEntries(MARKET_CHASSIS_POOL.map((c) => [c.chassisId, c.realWorldRef]));
-    expect(refs["tachibana_s16"]).toBe("S30Z");
-    expect(refs["nansei_gt33r"]).toBe("BNR32");
-    expect(refs["suganuma_soara"]).toBe("JZA80");
+  it("【発注仕様】実在車名を使用し、BNR32 / JZA80 / S30 が必ず存在する", () => {
+    const codes = MARKET_CHASSIS_POOL.map((c) => c.code);
+    for (const required of REQUIRED_CHASSIS_CODES) expect(codes).toContain(required);
+    const byCode = Object.fromEntries(MARKET_CHASSIS_POOL.map((c) => [c.code, c]));
+    expect(byCode["BNR32"]!.name).toBe("日産 スカイライン GT-R");
+    expect(byCode["JZA80"]!.name).toBe("トヨタ スープラ RZ");
+    expect(byCode["S30"]!.name).toBe("日産 フェアレディZ 432");
+    // 全車が実在のエンジン型式を持つ
+    for (const c of MARKET_CHASSIS_POOL) expect(c.engine.length).toBeGreaterThan(0);
+  });
+
+  it("【発注仕様】S30Z はサビ 80% 超の不動車としてしか流通しない（レストア対象）", () => {
+    const s30 = MARKET_CHASSIS_POOL.find((c) => c.code === "S30")!;
+    expect(s30.wreckOnly).toBe(true);
+    // 走る中古車として AA / 奇跡枠には出てこない
+    for (let w = 0; w < 60; w++) {
+      const m = generateWeeklyMarket(ctx({ week: w, act: 6 }));
+      expect(m.domestic.aa.some((l) => l.chassisId === "nissan_s30z")).toBe(false);
+      expect(m.domestic.miracle.some((l) => l.chassisId === "nissan_s30z")).toBe(false);
+    }
+    // コンテナの不動車枠には出る
+    let seen = false;
+    for (let w = 0; w < 200 && !seen; w++) {
+      for (const c of generateWeeklyMarket(ctx({ week: w, act: 6 })).containers) {
+        if (c.tier === "T3" && c.contents.includes("フェアレディZ")) seen = true;
+      }
+    }
+    expect(seen).toBe(true);
   });
 
   it("部品プール・車体プールが Act でゲートされている", () => {

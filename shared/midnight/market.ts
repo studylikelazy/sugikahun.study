@@ -142,26 +142,41 @@ export const MARKET_PART_POOL: readonly MarketPartDef[] = [
 
 export interface MarketChassisDef {
   chassisId: ChassisId;
+  /** **実在車名**（発注仕様：実在車名を使用する。判断ログ D-19） */
   name: string;
-  /** 実在のモチーフ（UI には出さない。設計上の対応を明示するためのメモ） */
-  realWorldRef: string;
+  /** 型式 */
+  code: string;
+  /** 搭載エンジン（実在の型式名） */
+  engine: string;
   layout: "FR" | "FF" | "MR" | "AWD";
   dryMassKg: number;
   /** 当時の新車価格相当（中古相場の基準） */
   newPriceYen: number;
   minAct: Act;
+  /** 不動・サビ進行の個体としてしか流通しない（＝レストア専用）*/
+  wreckOnly?: boolean;
 }
 
-/** ベース車プール。**`03` §2 のベースシャシー表が正本**（架空マルク：判断ログ D-08） */
+/**
+ * ベース車プール。**実在車名を使用する**（発注仕様／判断ログ D-19）。
+ * 発注で明示された 3 台 —— **BNR32 / JZA80 / S30Z** —— はそれぞれ
+ * ラスボス級のドナー／中盤の主力／**サビ 80% 超の不動レストア対象**として必ず登場する。
+ * `03` §2 のベースシャシー表が正本。
+ */
 export const MARKET_CHASSIS_POOL: readonly MarketChassisDef[] = [
-  { chassisId: "tachibana_s16", name: "橘 スプリンタ S16", realWorldRef: "S30Z", layout: "FR", dryMassKg: 925, newPriceYen: 1_380_000, minAct: 0 },
-  { chassisId: "tachibana_silka", name: "橘 シルカ S-15", realWorldRef: "S15", layout: "FR", dryMassKg: 1_180, newPriceYen: 2_480_000, minAct: 1 },
-  { chassisId: "kurogane_savant", name: "黒鉄 サヴァント FD", realWorldRef: "FD3S", layout: "FR", dryMassKg: 1_240, newPriceYen: 3_380_000, minAct: 2 },
-  { chassisId: "hayama_evol4", name: "葉山 エヴォル IV", realWorldRef: "CN9A", layout: "AWD", dryMassKg: 1_350, newPriceYen: 2_980_000, minAct: 3 },
-  { chassisId: "suganuma_soara", name: "菅沼 ソアーラ JZ", realWorldRef: "JZA80", layout: "FR", dryMassKg: 1_510, newPriceYen: 4_580_000, minAct: 4 },
-  { chassisId: "nansei_gt33r", name: "南星 GT-33R", realWorldRef: "BNR32", layout: "AWD", dryMassKg: 1_560, newPriceYen: 5_280_000, minAct: 5 },
-  { chassisId: "asaka_nsr", name: "朝霞 NS-R", realWorldRef: "NA1", layout: "MR", dryMassKg: 1_270, newPriceYen: 7_980_000, minAct: 6 },
+  { chassisId: "toyota_ae86", name: "トヨタ スプリンタートレノ GT-APEX", code: "AE86", engine: "4A-GE 1.6L NA 直4", layout: "FR", dryMassKg: 925, newPriceYen: 1_380_000, minAct: 0 },
+  { chassisId: "nissan_s15", name: "日産 シルビア spec-R", code: "S15", engine: "SR20DET 2.0L 直4ターボ", layout: "FR", dryMassKg: 1_200, newPriceYen: 2_480_000, minAct: 0 },
+  { chassisId: "mazda_fd3s", name: "マツダ RX-7 Type RS", code: "FD3S", engine: "13B-REW 654cc×2 ロータリーツインターボ", layout: "FR", dryMassKg: 1_250, newPriceYen: 3_380_000, minAct: 2 },
+  { chassisId: "mitsubishi_cn9a", name: "三菱 ランサーエボリューション IV GSR", code: "CN9A", engine: "4G63 2.0L 直4ターボ", layout: "AWD", dryMassKg: 1_350, newPriceYen: 2_980_000, minAct: 3 },
+  { chassisId: "toyota_jza80", name: "トヨタ スープラ RZ", code: "JZA80", engine: "2JZ-GTE 3.0L 直6ツインターボ", layout: "FR", dryMassKg: 1_510, newPriceYen: 4_580_000, minAct: 4 },
+  { chassisId: "nissan_bnr32", name: "日産 スカイライン GT-R", code: "BNR32", engine: "RB26DETT 2.6L 直6ツインターボ", layout: "AWD", dryMassKg: 1_430, newPriceYen: 5_280_000, minAct: 5 },
+  { chassisId: "honda_na1", name: "ホンダ NSX-R", code: "NA1", engine: "C30A 3.0L V6 NA", layout: "MR", dryMassKg: 1_230, newPriceYen: 7_980_000, minAct: 6 },
+  // ── レストア専用：物語の起点。ガレージの奥で 30 年眠っていた1台 ──
+  { chassisId: "nissan_s30z", name: "日産 フェアレディZ 432", code: "S30", engine: "S20 2.0L 直6 DOHC", layout: "FR", dryMassKg: 1_040, newPriceYen: 280_000, minAct: 0, wreckOnly: true },
 ];
+
+/** 発注仕様で明示された 3 台。コンテンツ削減時もこの 3 台は落とさない */
+export const REQUIRED_CHASSIS_CODES = ["BNR32", "JZA80", "S30"] as const;
 
 /* ═══════════════════════ 4. 市場の型 ═══════════════════════ */
 
@@ -575,7 +590,13 @@ function availableParts(act: Act): MarketPartDef[] {
   return MARKET_PART_POOL.filter((p) => p.minAct <= act);
 }
 
+/** 通常の「走る中古車」として流通する車種（レストア専用個体を除く） */
 function availableChassis(act: Act): MarketChassisDef[] {
+  return MARKET_CHASSIS_POOL.filter((c) => c.minAct <= act && c.wreckOnly !== true);
+}
+
+/** 不動・レストア対象として流通しうる車種（解体ヤード・コンテナ・納屋物件） */
+function wreckChassis(act: Act): MarketChassisDef[] {
   return MARKET_CHASSIS_POOL.filter((c) => c.minAct <= act);
 }
 
@@ -946,7 +967,7 @@ export function buildContainers(ctx: MarketContext): ContainerLot[] {
   const r = mulberry32(hash32(ctx.saveSeed, "container", ctx.week));
   const drought = ctx.containerDrought ?? 0;
   const n = 3 + Math.floor(ctx.act / 2);
-  const pool = availableChassis(ctx.act);
+  const pool = wreckChassis(ctx.act);
   const out: ContainerLot[] = [];
   for (let i = 0; i < n; i++) {
     const port = weightedPick(r, CONTAINER_PORTS, PORT_WEIGHTS);

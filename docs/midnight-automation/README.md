@@ -20,6 +20,7 @@
 | # | ファイル | 内容 | 主担当 |
 |---|---|---|---|
 | 00 | `README.md`（本書） | 目次／用語集／設計判断ログ／前提 | Director |
+| ★ | [`HANDOFF.md`](HANDOFF.md) | **実装引継ぎプロンプト**（API一覧・環境の罠・変更禁止の数値） | 実装担当 |
 | 01 | [`01_vision_and_core_loop.md`](./01_vision_and_core_loop.md) | 高コンセプト、三本柱、競合分析、コアループ、時間制度、オンボーディング、章立て | Director |
 | 02 | [`02_factory_automation.md`](./02_factory_automation.md) | 工場自動化の全仕様（グリッド／搬送／加工／流体／電力／回路／**公差・歩留まり**／外部性） | Lead Designer |
 | 03 | [`03_vehicle_engineering_and_physics.md`](./03_vehicle_engineering_and_physics.md) | 車両・部品データモデル、エンジン／駆動／空力／タイヤの数理モデル、セットアップ | Sim Programmer |

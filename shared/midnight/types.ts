@@ -17,8 +17,15 @@ export type ResearchId = string;
 export type TrackId = string;
 export type ChassisId = string;
 
-/** 製造等級。BP = Blueprint（実測選別・摺り合わせ済み） */
-export type Grade = "C" | "B" | "A" | "S" | "BP";
+/**
+ * 製造等級。
+ * `LEGENDARY`（伝説品質）＝ ブループリンティング（実測選別・摺り合わせ）を通した最上級。
+ * 寸法公差 ±0.003 mm に加え、**セット内の重量差 0.001 g 以下**を満たしたものだけが名乗れる。
+ */
+export type Grade = "C" | "B" | "A" | "S" | "LEGENDARY";
+
+/** LEGENDARY 成立に必要なセット内重量差 [g]（02 §9.4） */
+export const LEGENDARY_MASS_MATCH_G = 0.001;
 
 /** 研究の投入資源（Factorio のサイエンスパック相当） */
 export type DataKind = "D1" | "D2" | "D3" | "D4" | "D5" | "D6";
@@ -39,7 +46,7 @@ export const GRADE_TOLERANCE_MM: Readonly<Record<Grade, number>> = {
   B: 0.05,
   A: 0.02,
   S: 0.008,
-  BP: 0.003,
+  LEGENDARY: 0.003,
 };
 
 /** 等級の性能係数 q（02 §9.1） */
@@ -48,10 +55,10 @@ export const GRADE_QUALITY_FACTOR: Readonly<Record<Grade, number>> = {
   B: 1.0,
   A: 1.06,
   S: 1.12,
-  BP: 1.18,
+  LEGENDARY: 1.18,
 };
 
-export const GRADE_ORDER: readonly Grade[] = ["C", "B", "A", "S", "BP"];
+export const GRADE_ORDER: readonly Grade[] = ["C", "B", "A", "S", "LEGENDARY"];
 
 /** シミュレーションの時間定数（07 §3.1） */
 export const TICK_HZ = 20;

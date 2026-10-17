@@ -60,6 +60,7 @@ interface Fixture {
   cl: number;
   mu: number;
   shiftTimeS?: number;
+  finalDrive?: number;
   driveability?: number;
 }
 
@@ -75,7 +76,7 @@ function makeSpec(f: Fixture): VehicleSpec {
     rpmLimit: f.rpmLimit,
     rpmIdle: 1200,
     gearRatios: [3.23, 2.11, 1.54, 1.21, 1.0, 0.84],
-    finalDrive: 4.3,
+    finalDrive: f.finalDrive ?? 4.3,
     shiftTimeS: f.shiftTimeS ?? 0.25,
     drivetrainEff: 0.88,
     lsd: { initialNm: 80, lockAccel: 0.5, lockDecel: 0.3 },
@@ -113,13 +114,13 @@ function makeSpec(f: Fixture): VehicleSpec {
 
 /** 08 §7 の章ごと想定スペックとゲートタイム */
 const ACT_FIXTURES: Array<{ act: number; gateS: number; spec: VehicleSpec }> = [
-  { act: 0, gateS: 72, spec: makeSpec({ massKg: 1180, ps: 165, rpmLimit: 7500, shape: NA, cd: 0.34, cl: 0, mu: 1.12, driveability: 0.85 }) },
-  { act: 1, gateS: 66, spec: makeSpec({ massKg: 1115, ps: 220, rpmLimit: 7500, shape: TURBO, cd: 0.34, cl: 0, mu: 1.3, driveability: 0.8 }) },
-  { act: 2, gateS: 62, spec: makeSpec({ massKg: 1055, ps: 380, rpmLimit: 7800, shape: TURBO, cd: 0.37, cl: 0.55, mu: 1.33, driveability: 0.7 }) },
-  { act: 3, gateS: 58, spec: makeSpec({ massKg: 1030, ps: 430, rpmLimit: 8000, shape: TURBO, cd: 0.4, cl: 1.0, mu: 1.45, driveability: 0.72 }) },
-  { act: 4, gateS: 55, spec: makeSpec({ massKg: 970, ps: 510, rpmLimit: 8200, shape: TURBO, cd: 0.43, cl: 2.0, mu: 1.45, driveability: 0.76 }) },
-  { act: 5, gateS: 52, spec: makeSpec({ massKg: 900, ps: 585, rpmLimit: 8500, shape: TURBO, cd: 0.45, cl: 2.4, mu: 1.48, shiftTimeS: 0.08, driveability: 0.78 }) },
-  { act: 6, gateS: 49.999, spec: makeSpec({ massKg: 875, ps: 620, rpmLimit: 8800, shape: TURBO, cd: 0.46, cl: 2.6, mu: 1.52, shiftTimeS: 0.08, driveability: 0.8 }) },
+  { act: 0, gateS: 72, spec: makeSpec({ massKg: 1160, ps: 175, rpmLimit: 7500, shape: NA, cd: 0.34, cl: 0, mu: 1.15, finalDrive: 4.3, driveability: 0.85 }) },
+  { act: 1, gateS: 66, spec: makeSpec({ massKg: 1090, ps: 260, rpmLimit: 7500, shape: TURBO, cd: 0.35, cl: 0, mu: 1.3, finalDrive: 4.3, driveability: 0.8 }) },
+  { act: 2, gateS: 62, spec: makeSpec({ massKg: 1040, ps: 420, rpmLimit: 7800, shape: TURBO, cd: 0.37, cl: 0.7, mu: 1.33, finalDrive: 4.3, driveability: 0.7 }) },
+  { act: 3, gateS: 58, spec: makeSpec({ massKg: 1020, ps: 500, rpmLimit: 8000, shape: TURBO, cd: 0.41, cl: 1.2, mu: 1.45, finalDrive: 4.5, driveability: 0.72 }) },
+  { act: 4, gateS: 55, spec: makeSpec({ massKg: 980, ps: 620, rpmLimit: 8200, shape: TURBO, cd: 0.44, cl: 2.3, mu: 1.45, finalDrive: 4.5, driveability: 0.76 }) },
+  { act: 5, gateS: 52, spec: makeSpec({ massKg: 920, ps: 760, rpmLimit: 8600, shape: TURBO, cd: 0.47, cl: 2.7, mu: 1.48, finalDrive: 4.7, shiftTimeS: 0.08, driveability: 0.78 }) },
+  { act: 6, gateS: 49.999, spec: makeSpec({ massKg: 920, ps: 1020, rpmLimit: 9000, shape: TURBO, cd: 0.5, cl: 3.0, mu: 1.5, finalDrive: 4.9, shiftTimeS: 0.06, driveability: 0.8 }) },
 ];
 const ACT4 = ACT_FIXTURES[4]!.spec;
 const baseLap = () => solveLap(TSUKUBA_TC2000, ACT4, STANDARD_CONDITIONS).idealLapTimeS;
@@ -159,7 +160,7 @@ describe("章ゲートの到達性（08 §7）", () => {
     for (let i = 1; i < times.length; i++) expect(times[i]!).toBeLessThan(times[i - 1]!);
   });
 
-  it("最終スペックでも実在の非フォーミュラ最速（49.445秒）を超えない", () => {
+  it("最終スペック（1,020 PS）でも 48秒台には入れない", () => {
     const best = solveLap(TSUKUBA_TC2000, ACT_FIXTURES[6]!.spec).idealLapTimeS;
     expect(best).toBeGreaterThan(49.0);
   });

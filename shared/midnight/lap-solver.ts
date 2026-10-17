@@ -19,8 +19,8 @@ const STEP_M = 2;
 /** 前進・後退パスの反復回数（周回コースの収束用） */
 const CONVERGENCE_PASSES = 3;
 /** 走行ラインによる実効半径の拡大。縁石を使える区間はより大きく取れる */
-const LINE_RADIUS_GAIN = 1.03;
-const LINE_RADIUS_GAIN_KERB = 1.10;
+const LINE_RADIUS_GAIN = 1.0;
+const LINE_RADIUS_GAIN_KERB = 1.06;
 /** 回転慣性の等価質量化に使う諸元 */
 const WHEEL_INERTIA_KGM2 = 1.2;
 const ENGINE_INERTIA_KGM2 = 0.16;
@@ -297,10 +297,14 @@ export function solveLap(
         accelG = Math.min(2.0, tractionLimitN / (m * G));
       }
 
-      const shifting = shiftRemainingM > 0;
-      if (shifting) shiftRemainingM -= stepM;
+      // 変速損失は「駆動力ゼロで惰行する距離」として消化する。
+      // ノード境界で丸めると感度に量子化ノイズ（+10 PS で遅くなる等）が出るため、
+      // **ノードを部分的に覆う**（= 駆動力に有効割合を掛ける）ことで連続化する。
+      const coastM = Math.min(stepM, Math.max(0, shiftRemainingM));
+      shiftRemainingM -= coastM;
+      const driveDutyRatio = 1 - coastM / stepM;
 
-      const driveN = shifting ? 0 : Math.min(t.forceN, tractionLimitN);
+      const driveN = driveDutyRatio * Math.min(t.forceN, tractionLimitN);
       const resistN =
         dragN(vi, spec, cond) +
         ROLLING_RESISTANCE * m * G +

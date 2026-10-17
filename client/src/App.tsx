@@ -6,6 +6,7 @@ import { Route, Router as WouterRouter, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
+import Midnight from "./pages/Midnight";
 
 const routerBase =
   import.meta.env.BASE_URL === "/"
@@ -17,6 +18,7 @@ function AppRouter() {
     <WouterRouter base={routerBase}>
       <Switch>
         <Route path="/" component={Home} />
+        <Route path="/midnight" component={Midnight} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>

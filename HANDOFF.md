@@ -7,6 +7,11 @@
 > head と同一で、HANDOFF は含まれていない）。
 > よって本ファイルは **2026-10-17 時点のリポジトリ実状態から再構成したもの**である。
 > 教訓: **セッションをまたぐ成果物は、作った瞬間にコミット＋push する**（ローカルコミットはセッションを越えない）。
+>
+> **【続報 2026-10-17】原文は回収できた。** ユーザーが保持していた前セッションの差分から、
+> 本来の HANDOFF は [`docs/midnight-automation/HANDOFF.md`](docs/midnight-automation/HANDOFF.md)（371行・
+> 実装引継ぎプロンプト）＋ 両 README へのリンク追加だったことが判明し、原文のまま復元済み。
+> 本ファイル（ルート）はセッション横断の現況メモ、docs 側は「遊べるようにする」ための実装指示書、と役割を分ける。
 
 最終更新: 2026-10-17 / 対象: `main` = `2d9e49c`（PR #3 マージ直後）
 
@@ -33,7 +38,7 @@ PR #1 でアプリ本体は JDM テーマへ作り替わったが、これらの
 | #1 | 日本×JDMの自動化ゲーム（KOBO Motorworks）へリビルド＋Pages ワークフロー追加 | MERGED |
 | #2 | Pages ワークフローの pnpm バージョン検出修正 | MERGED |
 | #3 | **MIDNIGHT AUTOMATION** 詳細設計書（GDD）＋技術実装仕様＋参照実装（26ファイル・追加のみ） | MERGED（2026-10-17） |
-| #4（本セッション） | 本 HANDOFF の再構成＋`pnpm check` 修復（下記 5-1） | — |
+| #4（本セッション） | 本 HANDOFF の再構成＋原文 `docs/midnight-automation/HANDOFF.md` の復元＋`pnpm check` 修復（下記 5-1） | — |
 
 作業ブランチは Arena セッション毎に `arena/<id>-sugikahun-study` が切られる。`main` へは直接 push せず PR 経由。
 
@@ -67,10 +72,9 @@ PR #1 でアプリ本体は JDM テーマへ作り替わったが、これらの
 
 ## 4. 次のタスク候補（優先順）
 
-1. **参照実装を画面に繋ぐ最小スライス**（`09` の M0/M1 相当）
-   - まずは `lap-solver` を使った「セットアップを変えると筑波ラップが変わる」BUILD／感度ビュー（`spec/S6`）が
-     最小コストで設計の正しさを目に見える形にできる。次点で市場（`market.ts`）の出品票UI。
-   - 既存 KOBO Motorworks 画面へ組み込むか、新ルートで作るかは着手時に判断（`spec/S1` のシーン構成が正本）。
+1. **フェーズ1「経営ループが回る」の実装** — 指示書は復元された [`docs/midnight-automation/HANDOFF.md`](docs/midnight-automation/HANDOFF.md) が正本
+   （市場→レストア→組付け→筑波計測→報酬の1周を `/midnight` ルートに作る。画面の優先順・API一覧・変更禁止の数値・完了の定義まで書いてある）。
+   - 既存 `Home.tsx`（公開中）は触らず、`App.tsx` に `/midnight` ルートを追加する形。セーブキーは `midnight-automation-v1` 等で分離。
 2. **テスト実行経路の整備**（下記 5-2）: `vitest.config.ts` 追加＋`package.json` に `test` スクリプト＋CI で `pnpm check` とテストを回す。
 3. **旧文書の整理**: `MEMORY.md` / `PLAN.md` / `STRUCTURE.md` / `todo.md` は MARKET PULSE 前提のまま。
    現行アプリ（KOBO）と設計（MIDNIGHT）を指すよう更新するか、`docs/legacy/` へ退避して誤読を防ぐ。
@@ -128,6 +132,7 @@ client/src/App.tsx             ルーティング（wouter、BASE_URL 対応）
 server/                        本番用 Node サーバー（esbuild で dist/index.js）
 shared/midnight/               MIDNIGHT AUTOMATION 参照実装＋テスト（未接続）
 docs/midnight-automation/     企画書 01〜10＋詳細設計 spec/S1〜S6（正本は spec/）
+docs/midnight-automation/HANDOFF.md  実装引継ぎプロンプト（原文・復元済み）。次フェーズの指示書
 .github/workflows/deploy-pages.yml  GitHub Pages 自動デプロイ
 MEMORY.md / PLAN.md / STRUCTURE.md / todo.md   旧 MARKET PULSE 時代の記録（未更新）
 HANDOFF.md                     本ファイル。セッション終了時に更新して push すること
